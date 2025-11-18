@@ -12,170 +12,76 @@ import xml.etree.ElementTree as ET
 from pylab import *  # for plotting
 from numpy import genfromtxt #Load data from a text file, with missing values handled as specified.
 from numpy.random import *  # for random sampling
-import argparse
-from function import *
-from config_loader import MECHAConfig, parse_cellset_xml
-from network_builder import NetworkBuilder
-from utils import *
+from general_loader import *
+from geometry_loader import *
+from hormones_loader import *
+from cellset_parser import *
+from network_builder import *
 
-
-def mecha(Gen='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'MilletLR3_General.xml' #
+def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'MilletLR3_General.xml' #
           Geom='./extdata/Geometry.xml',#'Arabido4_Geometry_BBSRC.xml' #'Maize2_Geometry.xml' #''MilletLR3_Geometry.xml'    #'Wheat1_Nodal_Geometry_aerenchyma.xml' #'Maize1_Geometry.xml' #
           Hydr='./extdata/Hydraulics.xml', #'Arabido1_Hydraulics_ERC.xml' #'MilletLR3_Hydraulics.xml' #'Test_Hydraulics.xml' #
           BC='./extdata/Maize_BC_kr.xml', #'Arabido4_BC_BBSRC2.xml' #'Arabido1_BC_Emily.xml' #'Arabido3_BC_BBSRC.xml' #'Maize_BC_SoluteAna_krOsmo.xml'#'Maize_BC_OSxyl_hetero.xml' #'Arabido1_BC_Emily.xml' #'BC_Test.xml' #'Maize_BC_Plant_phys.xml'
           Horm='./extdata/Maize_Hormones_Carriers.xml',
-          cellsetdata='./extdata/current_root.xml',#present in Geometry.xml
+          Cellset='./extdata/current_root.xml',#present in Geometry.xml
           outdir=os.getcwd()): 
+    
+    print('[1/5] Importing data')
+    general = GeneralData(General)
+    geometry = GeometryData(Geom)
+    hormones = HormonesData(Horm)
+    cellset = parse_cellset(Cellset, im_scale = geometry.im_scale)
 
-def mecha(directory='./MECHA/',     #Project
-          Project='Projects/granar/', #BBSRC/'#'Projects/
-          Gen='Maize_General.xml',#'Arabido1_General.xml' #'MilletLR3_General.xml' #
-          Geom='Geometry.xml',#'Arabido4_Geometry_BBSRC.xml' #'Maize2_Geometry.xml' #''MilletLR3_Geometry.xml'    #'Wheat1_Nodal_Geometry_aerenchyma.xml' #'Maize1_Geometry.xml' #
-          Hydr='Hydraulics.xml', #'Arabido1_Hydraulics_ERC.xml' #'MilletLR3_Hydraulics.xml' #'Test_Hydraulics.xml' #
-          BC='Maize_BC_kr.xml', #'Arabido4_BC_BBSRC2.xml' #'Arabido1_BC_Emily.xml' #'Arabido3_BC_BBSRC.xml' #'Maize_BC_SoluteAna_krOsmo.xml'#'Maize_BC_OSxyl_hetero.xml' #'Arabido1_BC_Emily.xml' #'BC_Test.xml' #'Maize_BC_Plant_phys.xml'
-          Horm='Maize_Hormones_Carriers.xml'):
-    
-    print('Importing geometrical data')
-    OS=etree.parse(Gen).getroot().xpath('OS')[0].get("value")
-    Output_path=etree.parse(Gen).getroot().xpath('Output')[0].get("path")
-    Paraview=int(etree.parse(Gen).getroot().xpath('Paraview')[0].get("value"))
-    ParaviewWF=int(etree.parse(Gen).getroot().xpath('Paraview')[0].get("WallFlux"))
-    ParaviewMF=int(etree.parse(Gen).getroot().xpath('Paraview')[0].get("MembraneFlux"))
-    ParaviewPF=int(etree.parse(Gen).getroot().xpath('Paraview')[0].get("PlasmodesmataFlux"))
-    ParaviewWP=int(etree.parse(Gen).getroot().xpath('Paraview')[0].get("WallPot"))
-    ParaviewCP=int(etree.parse(Gen).getroot().xpath('Paraview')[0].get("CellPot"))
-    ParTrack=int(etree.parse(Gen).getroot().xpath('ParTrack')[0].get("value"))
-    Sym_Contagion=int(etree.parse(Gen).getroot().xpath('Sym_Contagion')[0].get("value"))
-    Apo_Contagion=int(etree.parse(Gen).getroot().xpath('Apo_Contagion')[0].get("value"))
-    color_threshold=float(etree.parse(Gen).getroot().xpath('color_threshold')[0].get("value"))
-    thickness_disp=float(etree.parse(Gen).getroot().xpath('thickness_disp')[0].get("value"))
-    thicknessJunction_disp=float(etree.parse(Gen).getroot().xpath('thicknessJunction_disp')[0].get("value"))
-    radiusPlasmodesm_disp=float(etree.parse(Gen).getroot().xpath('radiusPlasmodesm_disp')[0].get("value"))
-    
-    print('Import Geometrical data')
-    Plant=etree.parse(Geom).getroot().xpath('Plant')[0].get("value")
-    path=etree.parse(Geom).getroot().xpath('path')[0].get("value")
-    im_scale=float(etree.parse(Geom).getroot().xpath('im_scale')[0].get("value"))
-    Maturityrange=etree.parse(Geom).getroot().xpath('Maturityrange/Maturity')
-    passage_cell_range=etree.parse(Geom).getroot().xpath('passage_cell_range/passage_cell')
-    aerenchyma_range=etree.parse(Geom).getroot().xpath('aerenchyma_range/aerenchyma')
-    passage_cell_ID=[]
-    InterCid=list() #Aerenchyma is classified as intercellular space
-    for aerenchyma in aerenchyma_range:
-        if int(aerenchyma.get("id"))>0:
-            InterCid.append(int(aerenchyma.get("id"))) #Cell id starting at 0
-    PPP=list()
-
-    InterC_perim1=float(etree.parse(Geom).getroot().xpath('InterC_perim1')[0].get("value"))
-    InterC_perim2=float(etree.parse(Geom).getroot().xpath('InterC_perim2')[0].get("value"))
-    InterC_perim3=float(etree.parse(Geom).getroot().xpath('InterC_perim3')[0].get("value"))
-    InterC_perim4=float(etree.parse(Geom).getroot().xpath('InterC_perim4')[0].get("value"))
-    InterC_perim5=float(etree.parse(Geom).getroot().xpath('InterC_perim5')[0].get("value"))
-    kInterC=float(etree.parse(Geom).getroot().xpath('kInterC')[0].get("value"))
-    cell_per_layer=zeros((2,1))
-    cell_per_layer[0][0]=float(etree.parse(Geom).getroot().xpath('cell_per_layer')[0].get("cortex"))
-    cell_per_layer[1][0]=float(etree.parse(Geom).getroot().xpath('cell_per_layer')[0].get("stele"))
-    diffusion_length=zeros((2,1))
-    diffusion_length[0][0]=float(etree.parse(Geom).getroot().xpath('diffusion_length')[0].get("cortex"))
-    diffusion_length[1][0]=float(etree.parse(Geom).getroot().xpath('diffusion_length')[0].get("stele"))
-    thickness=float(etree.parse(Geom).getroot().xpath('thickness')[0].get("value")) #micron
-    PD_section=float(etree.parse(Geom).getroot().xpath('PD_section')[0].get("value")) #micron^2
-    Xylem_pieces=False
-    if float(etree.parse(Geom).getroot().xpath('Xylem_pieces')[0].get("flag"))==1:
-        Xylem_pieces=True
-    
-    #Import hormone properties
-    Degrad1=float(etree.parse(Horm).getroot().xpath('Hormone_movement/Degradation_constant_H1')[0].get("value")) #Hormone 1 degradation constant (mol degraded / mol-day)
-    Diff_PD1=float(etree.parse(Horm).getroot().xpath('Hormone_movement/Diffusivity_PD_H1')[0].get("value")) #Hormone 1 diffusivity constant (cm^2/day)
-    Diff_PW1=float(etree.parse(Horm).getroot().xpath('Hormone_movement/Diffusivity_PW_H1')[0].get("value")) #Hormone 1 diffusivity constant (cm^2/day)
-    D2O1=int(etree.parse(Horm).getroot().xpath('Hormone_movement/H1_D2O')[0].get("flag")) #Hormone 1 diffusivity constant (cm^2/day)
-    Active_transport_range=etree.parse(Horm).getroot().xpath('Hormone_active_transport/carrier_range/carrier')
-    Sym_source_range=etree.parse(Horm).getroot().xpath('Sym_Contagion/source_range/source')
-    Sym_Zombie0=[]
-    for source in Sym_source_range:
-        Sym_Zombie0.append(int(source.get("id")))
-    Sym_cc=[]
-    for source in Sym_source_range:
-        Sym_cc.append(float(source.get("concentration")))
-    Sym_target_range=etree.parse(Horm).getroot().xpath('Sym_Contagion/target_range/target')
-    Sym_Target=[]
-    for target in Sym_target_range:
-        Sym_Target.append(int(target.get("id")))
-    Sym_immune_range=etree.parse(Horm).getroot().xpath('Sym_Contagion/immune_range/immune')
-    Sym_Immune=[]
-    for immune in Sym_immune_range:
-        Sym_Immune.append(int(immune.get("id")))
-    Apo_source_range=etree.parse(Horm).getroot().xpath('Apo_Contagion/source_range/source')
-    Apo_Zombie0=[]
-    for source in Apo_source_range:
-        Apo_Zombie0.append(int(source.get("id")))
-    Apo_cc=[]
-    for source in Apo_source_range:
-        Apo_cc.append(float(source.get("concentration")))
-    Apo_target_range=etree.parse(Horm).getroot().xpath('Apo_Contagion/target_range/target')
-    Apo_Target=[]
-    for target in Apo_target_range:
-        Apo_Target.append(int(target.get("id")))
-    Apo_immune_range=etree.parse(Horm).getroot().xpath('Apo_Contagion/immune_range/immune')
-    Apo_Immune=[]
-    for immune in Apo_immune_range:
-        Apo_Immune.append(int(immune.get("id")))
-    contact_range=etree.parse(Horm).getroot().xpath('Contactrange/Contact')
-    Contact=[]
-    for contact in contact_range:
-        Contact.append(int(contact.get("id")))
-    
-    #Import cellset data
-    tree = etree.parse(directory + 'cellsetdata/' + path) #Maize_Charles\\Maize_pip_cross4.xml') # #Parse literally decrypts the tree element data         SteleOK_high.xml
-    rootelt = tree.getroot()
-    Cell2Wall_loop = rootelt.xpath('cells/cell/walls') #Cell2Wall_loop contains cell wall groups info (one group by cell), searched by xpath ("Smart" element identifier)
-    
     #Set path
-    points = rootelt.xpath('walls/wall/points') #points contains the wall elements attributes
-    Walls_loop = rootelt.xpath('cells/cell/walls/wall') #Walls_loop contains the individual cell to wall associations
-    Cells_loop=rootelt.xpath('cells/cell') #Cells_loop contains the cell attributes
-    newpath=directory+Project+Output_path+Plant+'/'
-    #print('Outputs in '+newpath)
+    newpath=outdir + '/' + geometry.plant_name + '/'
+
     if not os.path.exists(newpath):
         os.makedirs(newpath)
+        
+    passage_cell_ID=[]
+    PPP=list()
+    
+    print('[2/5] Creating the network')
+    create_wall_nodes()
     
     #Initializes network structure
     G = nx.Graph() #Full network
     
     #Creates wall & junction nodes
     print('Creating network nodes')
-    Nwalls=len(points)
-    Ncells=len(Cells_loop)
-    NwallsJun=Nwalls #Will increment at each new junction node
-    Junction_pos={}
+    n_walls=len(cellset['points'])
+    n_cells=len(cellset['cells'])
+    position_junction={}
     Junction2Wall={}
     nJunction2Wall={}
-    position_junctions=empty((Nwalls,4)) #Coordinates of junctions associated to each wall
-    position_junctions[:]=NAN
+    position_junctions=empty((n_walls,4)) #Coordinates of junctions associated to each wall
+    position_junctions[:]=np.nan
     min_x_wall=inf
     max_x_wall=0
     jid=0
-    for p in points: #Loop on wall elements (groups of points)
+    
+    for p in cellset['points']: #Loop on wall elements (groups of cellset['points'])
         wid= int((p.getparent().get)("id")) #wid records the current wall id number
         xprev=inf
         yprev=inf
         length=0.0 #Calculating total wall length
-        for r in p: #Loop on points within the wall element to calculate their average X and Y coordinates 
-            x= im_scale*float(r.get("x")) #X coordinate of the point
-            y= im_scale*float(r.get("y")) #Y coordinate of the point
+        # Junctions node creation
+        for r in p: #Loop on cellset['points'] within the wall element to calculate their average X and Y coordinates 
+            x= geometry.im_scale*float(r.get("x")) #X coordinate of the point
+            y= geometry.im_scale*float(r.get("y")) #Y coordinate of the point
             if xprev==inf: #First point
                 pos="x"+str(x)+"y"+str(y) #Position of the first point
                 position_junctions[wid][0]=x
                 position_junctions[wid][1]=y
-                if pos in Junction_pos:
-                    ind=Junction_pos[pos]
+                if pos in position_junction:
+                    ind=position_junction[pos]
                     Junction2Wall[ind].append(wid) #Several cell wall ID numbers can correspond to the same X Y coordinate where they meet
                     nJunction2Wall[ind]+=1
                 else: #New junction node
-                    Junction_pos[pos]=int(jid)
+                    position_junction[pos]=int(jid)
                     Junction2Wall[jid]=[wid] #Saves the cell wall ID number associated to the junction X Y coordinates
                     nJunction2Wall[jid]=1
-                    G.add_node(Nwalls+jid, indice=Nwalls+jid, type="apo", position=(float(x),float(y)), length=0) #Nodes are added at walls junctions (previous nodes corresponded to walls middle points). By default, borderlink is 0, but will be adjusted in next loop
+                    G.add_node(n_walls+jid, indice=n_walls+jid, type="apo", position=(float(x),float(y)), length=0) #Nodes are added at walls junctions (previous nodes corresponded to walls middle cellset['points']). By default, borderlink is 0, but will be adjusted in next loop
                     jid+=1
             else:
                 length+=hypot(x-xprev,y-yprev)
@@ -185,23 +91,24 @@ def mecha(directory='./MECHA/',     #Project
         pos="x"+str(x)+"y"+str(y) #Position of the last point
         position_junctions[wid][2]=x
         position_junctions[wid][3]=y
-        if pos in Junction_pos: #Get the junction ID
-            ind=Junction_pos[pos]
+        if pos in position_junction: #Get the junction ID
+            ind=position_junction[pos]
             Junction2Wall[ind].append(wid) #Several cell wall ID numbers can correspond to the same X Y coordinate where they meet
             nJunction2Wall[ind]+=1
         else: #New junction node
-            Junction_pos[pos]=int(jid)
+            position_junction[pos]=int(jid)
             Junction2Wall[jid]=[wid] #Saves the cell wall ID number associated to the junction X Y coordinates
             nJunction2Wall[jid]=1
-            G.add_node(Nwalls+jid, indice=Nwalls+jid, type="apo", position=(float(x),float(y)), length=0) #Nodes are added at walls junctions (previous nodes corresponded to walls middle points). By default, borderlink is 0, but will be adjusted in next loop
+            G.add_node(n_walls+jid, indice=n_walls+jid, type="apo", position=(float(x),float(y)), length=0) #Nodes are added at walls junctions (previous nodes corresponded to walls middle cellset['points']). By default, borderlink is 0, but will be adjusted in next loop
             jid+=1
+            
         #Second round, identifying the mid-point of the wall
         xprev=inf
         yprev=inf
         length2=0.0 #Calculating the cumulative wall length in order to obtain the exact position of the mid-length of the wall from known total length
         for r in p: #Second loop to catch the true middle position of the wall
-            x= im_scale*float(r.get("x")) #X coordinate of the point
-            y= im_scale*float(r.get("y")) #Y coordinate of the point
+            x= geometry.im_scale*float(r.get("x")) #X coordinate of the point
+            y= geometry.im_scale*float(r.get("y")) #Y coordinate of the point
             if not xprev==inf:
                 temp1=hypot(x-xprev,y-yprev) #length of the current piece of wall
                 if temp1==0:
@@ -219,30 +126,31 @@ def mecha(directory='./MECHA/',     #Project
         #Creation of the wall node
         G.add_node(wid, indice=wid, type="apo", position=(mx,my), length=length) #Saving wall attributes for graphical display (id, border, type, X and Y coordinates)
     
-    NwallsJun=Nwalls+jid
-    Ntot=NwallsJun+Ncells
+
+    n_wall_junction=n_walls+jid
+    Ntot=n_wall_junction+n_cells
     position=nx.get_node_attributes(G,'position') #Nodes XY positions (micrometers)
     
     #Junction nodes are pointwise by definition so their length is null, except for junctions at root surface, which are attributed a quarter of the length of each surface neighbouring wall for radial transport 
     lengths=nx.get_node_attributes(G,'length') #Walls lengths (micrometers)
     
     ##Calculation of the cosine of the trigonometric orientation between horizontal and the junction-wall vector (radian)
-    #cos_angle_wall=empty((Nwalls,2))
-    #cos_angle_wall[:]=NAN
-    #for wid in range(Nwalls):
+    #cos_angle_wall=empty((n_walls,2))
+    #cos_angle_wall[:]=np.nan
+    #for wid in range(n_walls):
     #    cos_angle_wall[wid][0]=(position_junctions[wid][0]-position[wid][0])/(hypot(position_junctions[wid][0]-position[wid][0],position_junctions[wid][1]-position[wid][1])) #Vectors junction1-wall
     #    cos_angle_wall[wid][1]=(position_junctions[wid][2]-position[wid][0])/(hypot(position_junctions[wid][2]-position[wid][0],position_junctions[wid][3]-position[wid][1])) #Vectors junction2-wall
     
     #Identifies soil-root interface walls
-    Borderlink=2*ones((NwallsJun,1))
+    Borderlink=2*ones((n_wall_junction,1))
     Borderwall=[] #Soil-root interface wall
     Borderaerenchyma=[] #Wall at the surface of aerenchyma
-    for w in Walls_loop: #Loop on walls, by cell - wall association, hence a wall can be repeated if associated to two cells
+    for w in cellset['walls']: #Loop on walls, by cell - wall association, hence a wall can be repeated if associated to two cells
         wid= int(w.get("id")) #Wall id number
         Borderlink[wid]-=1
-    for w in Cell2Wall_loop: #Loop on cells. Cell2Wall_loop contains cell wall groups info (one group by cell)
+    for w in cellset['cell_to_wall']: #Loop on cells. cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
         cgroup=int(w.getparent().get("group")) #Cell type (1=Exodermis;2=epidermis;3=endodermis;4=cortex;5=stele;16=pericycle)
-        for r in w: #w points to the cell walls around the current cell
+        for r in w: #w cellset['points'] to the cell walls around the current cell
             wid= int(r.get("id")) #Wall id number
             if Borderlink[wid]==1 and cgroup==2: #Wall node at the interface with soil
                 if wid not in Borderwall:
@@ -250,7 +158,7 @@ def mecha(directory='./MECHA/',     #Project
             elif Borderlink[wid]==1:
                 if wid not in Borderaerenchyma:
                     Borderaerenchyma.append(wid)
-    #for wid in range(Nwalls):
+    #for wid in range(n_walls):
         
     Borderjunction=[]
     jid=0
@@ -264,11 +172,11 @@ def mecha(directory='./MECHA/',     #Project
         #if count>2: #Should not happen
         #    print('What the count?')
         if count==2:
-            Borderjunction.append(jid+Nwalls)
-            Borderlink[jid+Nwalls]=1 #Junction node at the interface with soil
-            lengths[jid+Nwalls]=length
+            Borderjunction.append(jid+n_walls)
+            Borderlink[jid+n_walls]=1 #Junction node at the interface with soil
+            lengths[jid+n_walls]=length
         else:
-            Borderlink[jid+Nwalls]=0
+            Borderlink[jid+n_walls]=0
         jid+=1
     
     #Get X and Y for Cell nodes and cell nodes
@@ -279,41 +187,41 @@ def mecha(directory='./MECHA/',     #Project
     Apo_w_cc=[]
     Apo_w_Target=[]
     Apo_w_Immune=[]
-    for w in Cell2Wall_loop: #Loop on cells. Cell2Wall_loop contains cell wall groups info (one group by cell)
+    for w in cellset['cell_to_wall']: #Loop on cells. cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
         totx=0.0 #Summing up cell walls X positions
         toty=0.0 #Summing up cell walls Y positions
         cellnumber1 = int(w.getparent().get("id")) #Cell ID number
         cgroup=int(w.getparent().get("group")) #Cell type (1=Exodermis;2=epidermis;3=endodermis;4=cortex;5=stele;16=pericycle)
         div=float(len(w)) #Total number of walls around the current cell
-        for r in w: #w points to the cell walls around the current cell
+        for r in w: #w cellset['points'] to the cell walls around the current cell
             wid= int(r.get("id")) #Wall ID number
             totx += position[wid][0] #Contains the walls average X positions
             toty += position[wid][1] #Contains the walls average Y positions
         finalx=totx/div #Average cell X position (from the average position of its walls)
         finaly=toty/div #Average cell Y position (from the average position of its walls)
-        G.add_node(NwallsJun + cellnumber1, indice=(NwallsJun) + cellnumber1, type="cell", position = (finalx,finaly), cgroup=cgroup) #Adding cell nodes  borderlink=0,
+        G.add_node(n_wall_junction + cellnumber1, indice=(n_wall_junction) + cellnumber1, type="cell", position = (finalx,finaly), cgroup=cgroup) #Adding cell nodes  borderlink=0,
         if cgroup==11 or cgroup==23: #Phloem sieve tube
-            listsieve.append(NwallsJun+cellnumber1)
+            listsieve.append(n_wall_junction+cellnumber1)
         elif cgroup==13 or cgroup==19 or cgroup==20: #Xylem vessel
-            listxyl.append(NwallsJun+cellnumber1)
-            for r in w: #w points to the cell walls around the current cell
+            listxyl.append(n_wall_junction+cellnumber1)
+            for r in w: #w cellset['points'] to the cell walls around the current cell
                 wid= int(r.get("id")) #Wall ID number
                 listxylwalls.append(wid) #ghost walls crossing xylem vessels will appear twice
-        if Apo_Contagion:
-            if cellnumber1 in Apo_Zombie0:
-                cc=Apo_cc[Apo_Zombie0.index(cellnumber1)]
-                for r in w: #w points to the cell walls around the current cell
+        if general.apo_contagion:
+            if cellnumber1 in hormones.apo_zombie0:
+                cc=hormones.apo_cc[hormones.apo_zombie0.index(cellnumber1)]
+                for r in w: #w cellset['points'] to the cell walls around the current cell
                     wid= int(r.get("id")) #Wall ID number
                     if wid not in Apo_w_Zombies0:
                         Apo_w_Zombies0.append(wid)
                         Apo_w_cc.append(cc)
-            if cellnumber1 in Apo_Target:
-                for r in w: #w points to the cell walls around the current cell
+            if cellnumber1 in hormones.apo_target:
+                for r in w: #w cellset['points'] to the cell walls around the current cell
                     wid= int(r.get("id")) #Wall ID number
                     if wid not in Apo_w_Target:
                         Apo_w_Target.append(wid)
-            if cellnumber1 in Apo_Immune:
-                for r in w: #w points to the cell walls around the current cell
+            if cellnumber1 in hormones.apo_immune:
+                for r in w: #w cellset['points'] to the cell walls around the current cell
                     wid= int(r.get("id")) #Wall ID number
                     if wid not in Apo_w_Immune:
                         Apo_w_Immune.append(wid)
@@ -323,17 +231,17 @@ def mecha(directory='./MECHA/',     #Project
     
     #add Edges
     print('Creating network connections')
-    lat_dists=zeros((Nwalls,1))
+    lat_dists=zeros((n_walls,1))
     Nmb=0 #Total number of membranes
-    cellperimeter=np.linspace(0,0,Ncells)
-    cellarea=np.linspace(0,0,Ncells) #(micron^2)
+    cellperimeter=np.linspace(0,0,n_cells)
+    cellarea=np.linspace(0,0,n_cells) #(micron^2)
     CellWallsList=[] #Includes both walls & junctions ordered in a consecutive order
-    for w in Cell2Wall_loop: #Loop on cells. Cell2Wall_loop contains cell wall groups info (one group by cell)
+    for w in cellset['cell_to_wall']: #Loop on cells. cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
         cellnumber1 = int(w.getparent().get("id")) #Cell ID number
         i=0
         for r in w: #Loop for wall elements around the cell
             wid= int(r.get("id")) #Cell wall ID
-            d_vec=array([position[wid][0]-position[NwallsJun+cellnumber1][0],position[wid][1]-position[NwallsJun+cellnumber1][1]])
+            d_vec=array([position[wid][0]-position[n_wall_junction+cellnumber1][0],position[wid][1]-position[n_wall_junction+cellnumber1][1]])
             dist_cell=hypot(d_vec[0],d_vec[1]) #distance between wall node and cell node (micrometers)
             if dist_cell==0:
                 print(dist_cell,cellnumber1)
@@ -355,7 +263,7 @@ def mecha(directory='./MECHA/',     #Project
                 cellarea[cellnumber1] += (position_junctions[wid2][0+j]+position[wid2][0])*(position_junctions[wid2][1+j]-position[wid2][1]) #Cell area loop (micron^2)
                 wid1=wid2
             Nmb+=1
-            G.add_edge(NwallsJun + cellnumber1, wid, path='membrane', length=lengths[wid], dist=dist_cell, d_vec=d_vec) #, height=height #Adding all cell to wall connections (edges) #kaqp=kaqp, kw=kw, kmb=kmb, 
+            G.add_edge(n_wall_junction + cellnumber1, wid, path='membrane', length=lengths[wid], dist=dist_cell, d_vec=d_vec) #, height=height #Adding all cell to wall connections (edges) #kaqp=kaqp, kw=kw, kmb=kmb, 
             cellperimeter[cellnumber1]+=lengths[wid]
             i+=1
         dist1=hypot(position[wid1][0]-position_junctions[wid0][0],position[wid1][1]-position_junctions[wid0][1])
@@ -368,21 +276,21 @@ def mecha(directory='./MECHA/',     #Project
         cellarea[cellnumber1] += (position_junctions[wid0][0+j]+position[wid0][0])*(position_junctions[wid0][1+j]-position[wid0][1]) #Back to the first node
         cellarea[cellnumber1] /= -2.0
     
-    Cell_connec=-ones((Ncells,65),dtype=int) #Connected cells for further ranking
-    nCell_connec=zeros((Ncells,1),dtype=int) #Quantity of cell to cell connectionsC:\Users\heymansad
-    for i in range(0, len(Walls_loop)): #Loop on walls, by cell - wall association, hence a wall can be repeated if associated to two cells. Parent structure: Cell/Walls/Wall
-        r1 = Walls_loop[i] #Points to the current wall
+    Cell_connec=-ones((n_cells,65),dtype=int) #Connected cells for further ranking
+    nCell_connec=zeros((n_cells,1),dtype=int) #Quantity of cell to cell connectionsC:\Users\heymansad
+    for i in range(0, len(cellset['walls'])): #Loop on walls, by cell - wall association, hence a wall can be repeated if associated to two cells. Parent structure: Cell/Walls/Wall
+        r1 = cellset['walls'][i] #Points to the current wall
         cellid1 = r1.getparent().getparent().get("id") #Cell1 ID number
         id1 = r1.get("id") #Wall1 ID number
-        for j in range(i + 1, len(Walls_loop) ): #Loop on cell-wall associations that are further down in the list
-            r2 = Walls_loop[j] #Points to the further down wall in the list of cell-wall associations
+        for j in range(i + 1, len(cellset['walls']) ): #Loop on cell-wall associations that are further down in the list
+            r2 = cellset['walls'][j] #Points to the further down wall in the list of cell-wall associations
             cellid2 = r2.getparent().getparent().get("id") #Cell2 ID number
             id2 = r2.get("id") #Wall2 ID number
             if id1 == id2: #If walls 1 and 2 are the same, then cells 1 and 2 are connected by plasmodesmata
-                d_vec=array([position[NwallsJun+int(cellid2)][0]-position[NwallsJun+int(cellid1)][0],position[NwallsJun+int(cellid2)][1]-position[NwallsJun+int(cellid1)][1]])
+                d_vec=array([position[n_wall_junction+int(cellid2)][0]-position[n_wall_junction+int(cellid1)][0],position[n_wall_junction+int(cellid2)][1]-position[n_wall_junction+int(cellid1)][1]])
                 dist_cell=hypot(d_vec[0],d_vec[1]) #distance between wall node and cell node (micrometers)
                 d_vec/=dist_cell
-                G.add_edge(NwallsJun + int(cellid1), NwallsJun + int(cellid2), path='plasmodesmata', length=lengths[int(id1)], d_vec=d_vec) #, height=height #Adding all cell to cell connections (edges) #kpl=kpl, 
+                G.add_edge(n_wall_junction + int(cellid1), n_wall_junction + int(cellid2), path='plasmodesmata', length=lengths[int(id1)], d_vec=d_vec) #, height=height #Adding all cell to cell connections (edges) #kpl=kpl, 
                 Cell_connec[int(cellid1)][nCell_connec[int(cellid1)]]=int(cellid2)
                 nCell_connec[int(cellid1)]+=1
                 Cell_connec[int(cellid2)][nCell_connec[int(cellid2)]]=int(cellid1)
@@ -391,32 +299,32 @@ def mecha(directory='./MECHA/',     #Project
     jid=0
     for Junction, Walls in Junction2Wall.items(): #Loop on junctions between walls
         for wid in Walls: #Walls is the list of cell walls ID meeting at the junction pos
-            d_vec=array([position[wid][0]-position[jid+Nwalls][0],position[wid][1]-position[jid+Nwalls][1]])
+            d_vec=array([position[wid][0]-position[jid+n_walls][0],position[wid][1]-position[jid+n_walls][1]])
             dist_wall=hypot(d_vec[0],d_vec[1]) #distance between wall node and cell node (micrometers)
             d_vec/=dist_wall #As compared to lat_dist, dist_wall underestimates the actual path length between the wall and the junction. dist_wall is rather a straight distance.
-            G.add_edge(jid+Nwalls, int(wid), path='wall', length=lengths[int(wid)]/2, lat_dist=lat_dists[int(wid)][0], d_vec=d_vec, dist_wall=dist_wall) #Adding junction to wall connections (edges)
+            G.add_edge(jid+n_walls, int(wid), path='wall', length=lengths[int(wid)]/2, lat_dist=lat_dists[int(wid)][0], d_vec=d_vec, dist_wall=dist_wall) #Adding junction to wall connections (edges)
         jid+=1
     
     #And calculation of the centre of gravity of the endodermis
     x_grav=0.0 # (micrometers)
     y_grav=0.0 # (micrometers)
     n_cell_endo=0 #Counting the total number of cells in the endodermis
-    for w in Cell2Wall_loop: #Loop on cells. Cell2Wall_loop contains cell wall groups info (one group by cell)
+    for w in cellset['cell_to_wall']: #Loop on cells. cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
         cellnumber1 = int(w.getparent().get("id")) #Cell ID number
-        if G.node[NwallsJun + cellnumber1]['cgroup']==3: #Endodermis
-                x_grav+=position[NwallsJun + cellnumber1][0]
-                y_grav+=position[NwallsJun + cellnumber1][1]
+        if G.nodes[n_wall_junction + cellnumber1]['cgroup']==3: #Endodermis
+                x_grav+=position[n_wall_junction + cellnumber1][0]
+                y_grav+=position[n_wall_junction + cellnumber1][1]
                 n_cell_endo+=1
     x_grav/=n_cell_endo
     y_grav/=n_cell_endo
     
-    Cell_rank=zeros((Ncells,1)) #Ranking of cells (1=Exodermis, 2=Epidermis, 3=Endodermis, 4*=Cortex, 5*=Stele, 11=Phloem sieve tube, 12=Companion cell, 13=Xylem, 16=Pericycle), stars are replaced by the ranking within cortical cells and stele cells
+    Cell_rank=zeros((n_cells,1)) #Ranking of cells (1=Exodermis, 2=Epidermis, 3=Endodermis, 4*=Cortex, 5*=Stele, 11=Phloem sieve tube, 12=Companion cell, 13=Xylem, 16=Pericycle), stars are replaced by the ranking within cortical cells and stele cells
     Layer_dist=zeros((62,1)) #Average cell layers distances from center of gravity, by cells ranking 
     nLayer=zeros((62,1)) #Total number of cells in each rank (indices follow ranking numbers)
     xyl_dist=[] #List of distances between xylem and cross-section centre
-    for w in Cell2Wall_loop: #Loop on cells. Cell2Wall_loop contains cell wall groups info (one group by cell)
+    for w in cellset['cell_to_wall']: #Loop on cells. cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
         cellnumber1 = int(w.getparent().get("id")) #Cell ID number
-        celltype=G.node[NwallsJun + cellnumber1]['cgroup'] #Cell type
+        celltype=G.nodes[n_wall_junction + cellnumber1]['cgroup'] #Cell type
         if celltype==19 or celltype==20: #Proto- and Meta-xylem in new Cellset version
             celltype=13
         elif celltype==21: #Xylem pole pericycle in new Cellset version
@@ -426,8 +334,8 @@ def mecha(directory='./MECHA/',     #Project
         elif celltype==26: #Companion cell in new Cellset version
             celltype=12
         Cell_rank[cellnumber1]=celltype #Later on, cell types 4 and 5 will be updated to account for their ranking within the cortex / stele
-        x_cell=position[NwallsJun + cellnumber1][0] #Cell position (micrometers)
-        y_cell=position[NwallsJun + cellnumber1][1]
+        x_cell=position[n_wall_junction + cellnumber1][0] #Cell position (micrometers)
+        y_cell=position[n_wall_junction + cellnumber1][1]
         dist=hypot(x_cell-x_grav,y_cell-y_grav) #(micrometers)
         Layer_dist[celltype]+=dist
         nLayer[celltype]+=1
@@ -447,94 +355,94 @@ def mecha(directory='./MECHA/',     #Project
     #rank_cellperimeters_out=linspace(nan,nan,100)
     listprotosieve=[]
     mincid=99999
-    for w in Cell2Wall_loop: #Loop on cells. Cell2Wall_loop contains cell wall groups info (one group by cell)
+    for w in cellset['cell_to_wall']: #Loop on cells. cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
         cellnumber1 = int(w.getparent().get("id")) #Cell ID number
-        #celltype=G.node[NwallsJun + cellnumber1]['cgroup']
+        #celltype=G.nodes[n_wall_junction + cellnumber1]['cgroup']
         celltype=Cell_rank[cellnumber1] #Cell types 4 and 5 updated to account for their ranking within the cortex / stele
         if celltype==4: #Cortex
             if any(Cell_rank[Cell_connec[cellnumber1][0:nCell_connec[cellnumber1][0]]]==3): #Cell to cell connection with endodermis
                 Cell_rank[cellnumber1]=40
-                x_cell=position[NwallsJun + cellnumber1][0] #Cell position (micrometers)
-                y_cell=position[NwallsJun + cellnumber1][1]
+                x_cell=position[n_wall_junction + cellnumber1][0] #Cell position (micrometers)
+                y_cell=position[n_wall_junction + cellnumber1][1]
                 dist=hypot(x_cell-x_grav,y_cell-y_grav) #(micrometers)
                 Layer_dist[40]+=dist
                 nLayer[40]+=1
                 #rank_cellperimeters_in[int(nLayer[40]-1)]=cellperimeter[cellnumber1]
-                if cellperimeter[cellnumber1]<InterC_perim1:
-                    InterCid.append(cellnumber1) #Cell id starting at 0
+                if cellperimeter[cellnumber1]<geometry.interc_perims[0]:
+                    geometry.intercellular_ids.append(cellnumber1) #Cell id starting at 0
             elif any(Cell_rank[Cell_connec[cellnumber1][0:nCell_connec[cellnumber1][0]]]==outercortex_connec_rank): #Cell to cell connection with exodermis
                 Cell_rank[cellnumber1]=49
-                x_cell=position[NwallsJun + cellnumber1][0] #Cell position (micrometers)
-                y_cell=position[NwallsJun + cellnumber1][1]
+                x_cell=position[n_wall_junction + cellnumber1][0] #Cell position (micrometers)
+                y_cell=position[n_wall_junction + cellnumber1][1]
                 dist=hypot(x_cell-x_grav,y_cell-y_grav) #(micrometers)
                 Layer_dist[49]+=dist
                 nLayer[49]+=1
                 #rank_cellperimeters_out[int(nLayer[49]-1)]=cellperimeter[cellnumber1]
-                if cellperimeter[cellnumber1]<InterC_perim5:
-                    InterCid.append(cellnumber1) #Cell id starting at 0
+                if cellperimeter[cellnumber1]<geometry.interc_perims[4]:
+                    geometry.intercellular_ids.append(cellnumber1) #Cell id starting at 0
         elif celltype==5 or celltype==11 or celltype==12 or celltype==13: #Stele
             if any(Cell_rank[Cell_connec[cellnumber1][0:nCell_connec[cellnumber1][0]]]==stele_connec_rank): #Cell to cell connection with pericycle
                 Cell_rank[cellnumber1]=50
-                x_cell=position[NwallsJun + cellnumber1][0] #Cell position (micrometers)
-                y_cell=position[NwallsJun + cellnumber1][1]
+                x_cell=position[n_wall_junction + cellnumber1][0] #Cell position (micrometers)
+                y_cell=position[n_wall_junction + cellnumber1][1]
                 dist=hypot(x_cell-x_grav,y_cell-y_grav) #(micrometers)
                 Layer_dist[50]+=dist
                 nLayer[50]+=1
-                if G.node[NwallsJun + cellnumber1]['cgroup']==11 or G.node[NwallsJun + cellnumber1]['cgroup']==23:
-                    listprotosieve.append(NwallsJun + cellnumber1)
+                if G.nodes[n_wall_junction + cellnumber1]['cgroup']==11 or G.nodes[n_wall_junction + cellnumber1]['cgroup']==23:
+                    listprotosieve.append(n_wall_junction + cellnumber1)
     Nsieve=len(listsieve)
     Nprotosieve=len(listprotosieve)
     
     for i in range(12):
-        for w in Cell2Wall_loop: #Loop on cells. Cell2Wall_loop contains cell wall groups info (one group by cell)
+        for w in cellset['cell_to_wall']: #Loop on cells. cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
             cellnumber1 = int(w.getparent().get("id")) #Cell ID number
             celltype=Cell_rank[cellnumber1] #Cell types 4 and 5 updated to account for their ranking within the cortex / stele
             if celltype==4 and i<4: #Cortex
            # if i<4: #Within 3 layers of cortical sides
                 if any(Cell_rank[Cell_connec[cellnumber1][0:nCell_connec[cellnumber1][0]]]==(40+i)): #Cell to cell connection with endodermis
                     Cell_rank[cellnumber1]=41+i
-                    x_cell=position[NwallsJun + cellnumber1][0] #Cell position (micrometers)
-                    y_cell=position[NwallsJun + cellnumber1][1]
+                    x_cell=position[n_wall_junction + cellnumber1][0] #Cell position (micrometers)
+                    y_cell=position[n_wall_junction + cellnumber1][1]
                     dist=hypot(x_cell-x_grav,y_cell-y_grav) #(micrometers)
                     Layer_dist[41+i]+=dist
                     nLayer[41+i]+=1
                     #rank_cellperimeters_in[int(nLayer[41+i]-1)]=cellperimeter[cellnumber1]
-                    if i==0 and cellperimeter[cellnumber1]<InterC_perim2:
-                        InterCid.append(cellnumber1)
-                    elif i==1 and cellperimeter[cellnumber1]<InterC_perim3:
-                        InterCid.append(cellnumber1)
-                    elif i==2 and cellperimeter[cellnumber1]<InterC_perim4:
-                        InterCid.append(cellnumber1)
-                    elif i>2 and cellperimeter[cellnumber1]<InterC_perim5:
-                        InterCid.append(cellnumber1)
+                    if i==0 and cellperimeter[cellnumber1]<geometry.interc_perims[1]:
+                        geometry.intercellular_ids.append(cellnumber1)
+                    elif i==1 and cellperimeter[cellnumber1]<geometry.interc_perims[2]:
+                        geometry.intercellular_ids.append(cellnumber1)
+                    elif i==2 and cellperimeter[cellnumber1]<geometry.interc_perims[3]:
+                        geometry.intercellular_ids.append(cellnumber1)
+                    elif i>2 and cellperimeter[cellnumber1]<geometry.interc_perims[4]:
+                        geometry.intercellular_ids.append(cellnumber1)
                 elif any(Cell_rank[Cell_connec[cellnumber1][0:nCell_connec[cellnumber1][0]]]==(49-i)): #Cell to cell connection with exodermis
                     Cell_rank[cellnumber1]=48-i
-                    x_cell=position[NwallsJun + cellnumber1][0] #Cell position (micrometers)
-                    y_cell=position[NwallsJun + cellnumber1][1]
+                    x_cell=position[n_wall_junction + cellnumber1][0] #Cell position (micrometers)
+                    y_cell=position[n_wall_junction + cellnumber1][1]
                     dist=hypot(x_cell-x_grav,y_cell-y_grav) #(micrometers)
                     Layer_dist[48-i]+=dist
                     nLayer[48-i]+=1
                     #rank_cellperimeters_out[int(nLayer[48-i]-1)]=cellperimeter[cellnumber1]
-                    if cellperimeter[cellnumber1]<InterC_perim5:
-                        InterCid.append(cellnumber1)
+                    if cellperimeter[cellnumber1]<geometry.interc_perims[4]:
+                        geometry.intercellular_ids.append(cellnumber1)
             elif celltype==5 or celltype==11 or celltype==12 or celltype==13: #Stele
                 if i<10:
                     if any(Cell_rank[Cell_connec[cellnumber1][0:nCell_connec[cellnumber1][0]]]==(50+i)): #Cell to cell connection with pericycle
                         Cell_rank[cellnumber1]=51+i
-                        x_cell=position[NwallsJun + cellnumber1][0] #Cell position (micrometers)
-                        y_cell=position[NwallsJun + cellnumber1][1]
+                        x_cell=position[n_wall_junction + cellnumber1][0] #Cell position (micrometers)
+                        y_cell=position[n_wall_junction + cellnumber1][1]
                         dist=hypot(x_cell-x_grav,y_cell-y_grav) #(micrometers)
                         Layer_dist[51+i]+=dist
                         nLayer[51+i]+=1
                 else: #No more than 11 stele cell layers
                     Cell_rank[cellnumber1]=61
-                    x_cell=position[NwallsJun + cellnumber1][0] #Cell position (micrometers)
-                    y_cell=position[NwallsJun + cellnumber1][1]
+                    x_cell=position[n_wall_junction + cellnumber1][0] #Cell position (micrometers)
+                    y_cell=position[n_wall_junction + cellnumber1][1]
                     dist=hypot(x_cell-x_grav,y_cell-y_grav) #(micrometers)
                     Layer_dist[61]+=dist
                     nLayer[61]+=1
     
-    InterCid=InterCid[1:]
+    geometry.intercellular_ids=geometry.intercellular_ids[1:]
     
     #Calculating cell surfaces at tissue interfaces (total and interfacing with a cell that is not an intercellular space)
     indice=nx.get_node_attributes(G,'indice') #Node indices (walls, junctions and cells)
@@ -544,30 +452,30 @@ def mecha(directory='./MECHA/',     #Project
     Length_outer_cortex_nospace=0.0 #Cross-section membrane length at the interface between exodermis and cortex not including interfaces with intercellular spaces
     Length_cortex_cortex_nospace=0.0 #Cross-section membrane length at the interface between exodermis and cortex not including interfaces with intercellular spaces
     Length_cortex_endo_nospace=0.0 #Cross-section membrane length at the interface between exodermis and cortex not including interfaces with intercellular spaces
-    for node, edges in G.adjacency_iter() :
+    for node, edges in G.adjacency() :
         i=indice[node] #Node ID number
-        if i>=NwallsJun: #Cell
-            if G.node[i]['cgroup']==16 or G.node[i]['cgroup']==21:
+        if i>=n_wall_junction: #Cell
+            if G.nodes[i]['cgroup']==16 or G.nodes[i]['cgroup']==21:
                 for neighboor, eattr in edges.items(): #Loop on connections (edges)
-                    if eattr['path'] == "plasmodesmata" and (G.node[indice[neighboor]]['cgroup']==11 or G.node[indice[neighboor]]['cgroup']==23): #Plasmodesmata connection  #eattr is the edge attribute (i.e. connection type)
-                        PPP.append(i-NwallsJun)
-            elif G.node[i]['cgroup']==outercortex_connec_rank or G.node[i]['cgroup']==4 or G.node[i]['cgroup']==3: #exodermis or cortex or endodermis (or epidermis if there is no exodermis)
-                if i-NwallsJun not in InterCid: #The loop focuses on exo, cortex and endodermis cells that are not intercellular spaces
+                    if eattr['path'] == "plasmodesmata" and (G.nodes[indice[neighboor]]['cgroup']==11 or G.nodes[indice[neighboor]]['cgroup']==23): #Plasmodesmata connection  #eattr is the edge attribute (i.e. connection type)
+                        PPP.append(i-n_wall_junction)
+            elif G.nodes[i]['cgroup']==outercortex_connec_rank or G.nodes[i]['cgroup']==4 or G.nodes[i]['cgroup']==3: #exodermis or cortex or endodermis (or epidermis if there is no exodermis)
+                if i-n_wall_junction not in geometry.intercellular_ids: #The loop focuses on exo, cortex and endodermis cells that are not intercellular spaces
                     for neighboor, eattr in edges.items(): #Loop on connections (edges)
                         if eattr['path'] == "plasmodesmata": #Plasmodesmata connection  #eattr is the edge attribute (i.e. connection type)
                             j = (indice[neighboor]) #neighbouring node number
                             l_membrane=eattr['length']
-                            if (G.node[i]['cgroup']==outercortex_connec_rank and G.node[j]['cgroup']==4) or (G.node[j]['cgroup']==outercortex_connec_rank and G.node[i]['cgroup']==4):#Exodermis to cortex cell or vice versa (epidermis if no exodermis exists)
+                            if (G.nodes[i]['cgroup']==outercortex_connec_rank and G.nodes[j]['cgroup']==4) or (G.nodes[j]['cgroup']==outercortex_connec_rank and G.nodes[i]['cgroup']==4):#Exodermis to cortex cell or vice versa (epidermis if no exodermis exists)
                                 Length_outer_cortex_tot+=l_membrane
-                                if j-NwallsJun not in InterCid:
+                                if j-n_wall_junction not in geometry.intercellular_ids:
                                     Length_outer_cortex_nospace+=l_membrane
-                            elif (G.node[i]['cgroup']==4 and G.node[j]['cgroup']==4):#Cortex to cortex cell
+                            elif (G.nodes[i]['cgroup']==4 and G.nodes[j]['cgroup']==4):#Cortex to cortex cell
                                 Length_cortex_cortex_tot+=l_membrane
-                                if j-NwallsJun not in InterCid:
+                                if j-n_wall_junction not in geometry.intercellular_ids:
                                     Length_cortex_cortex_nospace+=l_membrane
-                            elif (G.node[i]['cgroup']==3 and G.node[j]['cgroup']==4) or (G.node[j]['cgroup']==3 and G.node[i]['cgroup']==4):#Cortex to endodermis cell or vice versa
+                            elif (G.nodes[i]['cgroup']==3 and G.nodes[j]['cgroup']==4) or (G.nodes[j]['cgroup']==3 and G.nodes[i]['cgroup']==4):#Cortex to endodermis cell or vice versa
                                 Length_cortex_endo_tot+=l_membrane
-                                if j-NwallsJun not in InterCid:
+                                if j-n_wall_junction not in geometry.intercellular_ids:
                                     Length_cortex_endo_nospace+=l_membrane
     
     for i in range(62): #Finalizing distance averaging
@@ -594,10 +502,10 @@ def mecha(directory='./MECHA/',     #Project
         k+=1
         r_discret=vstack((r_discret,j-sum(r_discret[1:k])))
     rank2row[3]=j #2 rows for endodermis (inner and outer) + 2 rows for passage cells in between
-    Layer_dist2=vstack((Layer_dist2,Layer_dist[3]))
-    Layer_dist2=vstack((Layer_dist2,Layer_dist[3]))
-    Layer_dist2=vstack((Layer_dist2,Layer_dist[3]))
-    Layer_dist2=vstack((Layer_dist2,Layer_dist[3]))
+    Layer_dist2=vstack((Layer_dist2,Layer_dist[3][0]))
+    Layer_dist2=vstack((Layer_dist2,Layer_dist[3][0]))
+    Layer_dist2=vstack((Layer_dist2,Layer_dist[3][0]))
+    Layer_dist2=vstack((Layer_dist2,Layer_dist[3][0]))
     j+=4
     k+=1
     r_discret=vstack((r_discret,j-sum(r_discret[1:k])))
@@ -694,7 +602,7 @@ def mecha(directory='./MECHA/',     #Project
         k+=1
         r_discret=vstack((r_discret,j-sum(r_discret[1:k])))
     rank2row[2]=j #Epidermis
-    Layer_dist2=vstack((Layer_dist2,Layer_dist[2]))
+    Layer_dist2=vstack((Layer_dist2,Layer_dist[2][0]))
     j+=1
     k+=1
     r_discret=vstack((r_discret,j-sum(r_discret[1:k])))
@@ -703,86 +611,86 @@ def mecha(directory='./MECHA/',     #Project
     row_outercortex=rank2row[1]-1
     if isnan(row_outercortex): #No exodermal layer
         row_outercortex=rank2row[2]-1
-    row_outercortex=int(row_outercortex) 
     
+    row_outercortex=int(row_outercortex[0]) 
     #Then min and max distances to cross-section centre
     dmax_cortex=0.0 #For gradient of relative AQP distribution
     dmin_cortex=inf #For gradient of relative AQP distribution
     davg_epi=0.0 #avg distance of between exodermis and centre of gravity (micrometers)
-    dist_grav=zeros((Nwalls,1)) #distance between node and cross-section center of gravity (micrometers)
+    dist_grav=zeros((n_walls,1)) #distance between node and cross-section center of gravity (micrometers)
     temp=0.0 #Counting the number of membranes from epidermis
-    for w in Cell2Wall_loop: #Loop on cells. Cell2Wall_loop contains cell wall groups info (one group by cell)
+    for w in cellset['cell_to_wall']: #Loop on cells. cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
         cellnumber1 = int(w.getparent().get("id")) #Cell ID number
         for r in w: #Loop for wall elements around the cell
             wid= int(r.get("id")) #Cell wall ID
             dist_grav[wid]=sqrt(square(position[wid][0]-x_grav)+square(position[wid][1]-y_grav)) #Distance between membrane and cross section centre of gravity (micrometers)
-            if G.node[NwallsJun + cellnumber1]['cgroup']==4: #Cortex
+            if G.nodes[n_wall_junction + cellnumber1]['cgroup']==4: #Cortex
                 dmax_cortex=max(dmax_cortex,dist_grav[wid])
                 dmin_cortex=min(dmin_cortex,dist_grav[wid])
-            elif G.node[NwallsJun + cellnumber1]['cgroup']==2: #Epidermis
-                davg_epi+=dist_grav[wid]
+            elif G.nodes[n_wall_junction + cellnumber1]['cgroup']==2: #Epidermis
+                davg_epi+=dist_grav[wid][0]
                 temp+=1.0
     davg_epi/=temp #Last step of averaging (note that we take both inner and outer membranes into account in the averaging)
     perimeter=2*pi*davg_epi*1.0E-04 #(cm)
     
-    #Calculating cell borders accounting for wall thickness
-    if Paraview==1 or ParTrack==1 or Apo_Contagion>0 or Sym_Contagion>0:
-        print('Preparing geometrical properties for Paraview')
+    #Calculating cell borders accounting for wall geometry.thickness
+    if general.paraview==1 or general.par_track==1 or general.apo_contagion>0 or general.sym_contagion>0:
+        print('Preparing geometrical properties for general.paraview')
         ThickWalls=[] #Was created to display 3D membranes
-        nThickWalls=zeros((2*Nwalls,1)) #This will save how many new junction wall ID were already saved in connections to new wall ID (the vector is a little too long)
+        nThickWalls=zeros((2*n_walls,1)) #This will save how many new junction wall ID were already saved in connections to new wall ID (the vector is a little too long)
         ThickWallsX=[] #Same as Thickwalls except that it includes extra info about borderlink nodes, was created to display walls
-        Wall2NewWall=empty((Nwalls,2))
-        Wall2NewWall[:]=NAN
-        nWall2NewWall=zeros((Nwalls,1))
-        Wall2NewWallX=empty((NwallsJun,8)) #This one also includes "junction" to "new junctions" ID
-        Wall2NewWallX[:]=NAN
-        nWall2NewWallX=zeros((NwallsJun,1))
-        ThickWallPolygonX=empty((Nwalls*2,4))
-        ThickWallPolygonX[:]=NAN
-        nThickWallPolygonX=zeros((Nwalls*2,1))
-        Wall2Cell=empty((Nwalls,2))
-        Wall2Cell[:]=NAN
-        nWall2Cell=zeros((Nwalls,1))
-        Junction2Wall2Cell=empty((NwallsJun-Nwalls,12))
-        Junction2Wall2Cell[:]=NAN
-        nJunction2Wall2Cell=zeros((NwallsJun-Nwalls,1))
-        Junction2Wall2=empty((NwallsJun-Nwalls,12)) #This Junction2Wall will be incomplete because it needs to have the same dimension as Junction2Wall2Cell
-        Junction2Wall2[:]=NAN
-        nJunction2Wall2=zeros((NwallsJun-Nwalls,1))
-        Wall2Junction=empty((Nwalls,2))
-        Wall2Junction[:]=NAN
-        nWall2Junction=zeros((Nwalls,1))
-        Cell2ThickWalls=empty((Ncells,32))
-        Cell2ThickWalls[:]=NAN
-        nCell2ThickWalls=zeros((Ncells,1))
-        r_rel=empty((Nwalls,1))
-        r_rel[:]=NAN
-        x_rel=empty((NwallsJun+Ncells,1))
-        x_rel[:]=NAN
-        L_diff=((abs(float(Layer_dist[3]-Layer_dist[2])*1.0E-04),abs(float(Layer_dist[3] - xyl80_dist)*1.0E-04))) #Diffusion lengths (cm)
+        Wall2NewWall=empty((n_walls,2))
+        Wall2NewWall[:]=np.nan
+        nWall2NewWall=zeros((n_walls,1))
+        Wall2NewWallX=empty((n_wall_junction,8)) #This one also includes "junction" to "new junctions" ID
+        Wall2NewWallX[:]=np.nan
+        nWall2NewWallX=zeros((n_wall_junction,1))
+        ThickWallPolygonX=empty((n_walls*2,4))
+        ThickWallPolygonX[:]=np.nan
+        nThickWallPolygonX=zeros((n_walls*2,1))
+        Wall2Cell=empty((n_walls,2))
+        Wall2Cell[:]=np.nan
+        nWall2Cell=zeros((n_walls,1))
+        Junction2Wall2Cell=empty((n_wall_junction-n_walls,12))
+        Junction2Wall2Cell[:]=np.nan
+        nJunction2Wall2Cell=zeros((n_wall_junction-n_walls,1))
+        Junction2Wall2=empty((n_wall_junction-n_walls,12)) #This Junction2Wall will be incomplete because it needs to have the same dimension as Junction2Wall2Cell
+        Junction2Wall2[:]=np.nan
+        nJunction2Wall2=zeros((n_wall_junction-n_walls,1))
+        Wall2Junction=empty((n_walls,2))
+        Wall2Junction[:]=np.nan
+        nWall2Junction=zeros((n_walls,1))
+        Cell2ThickWalls=empty((n_cells,32))
+        Cell2ThickWalls[:]=np.nan
+        nCell2ThickWalls=zeros((n_cells,1))
+        r_rel=empty((n_walls,1))
+        r_rel[:]=np.nan
+        x_rel=empty((n_wall_junction+n_cells,1))
+        x_rel[:]=np.nan
+        L_diff=((abs(float(Layer_dist[3][0]-Layer_dist[2][0])*1.0E-04),abs(float(Layer_dist[3][0] - xyl80_dist)*1.0E-04))) #Diffusion lengths (cm)
         twpid=0 #Thick wall point ID
         twpidX=0
-        for node, edges in G.adjacency_iter():
+        for node, edges in G.adjacency():
             wid=indice[node]
-            if wid<Nwalls: #wall that is not a junction (connected to a cell)
+            if wid<n_walls: #wall that is not a junction (connected to a cell)
                 for neighboor, eattr in edges.items(): #Loop on connections (edges)
                     cid=int(indice[neighboor])
-                    if G.node[cid]['type']=='cell':
+                    if G.nodes[cid]['type']=='cell':
                         if not position[cid][0]==position[wid][0]:
                             slopeCG=(position[cid][1]-position[wid][1])/(position[cid][0]-position[wid][0]) #slope of the line connecting the wall node to the center of gravity of the cell
                         else:
                             slopeCG=inf
-                        x=position[wid][0]+cos(arctan(slopeCG))*thickness_disp/2*sign(position[cid][0]-position[wid][0]) #-> new position of the wall node on the current cell side
-                        y=position[wid][1]+sin(arctan(slopeCG))*thickness_disp/2*sign(position[cid][0]-position[wid][0])
-                        ThickWalls.append(array((twpid,wid,cid,x,y,inf,inf,Borderlink[wid]))) #Adds the thick wall node ID, its parent node ID, the associated cell ID, the new coordinates in X and Y, and the two neighbouring new junction walls IDs (not known at this point in the loop)     G.node[i]['borderlink']
-                        Cell2ThickWalls[cid-NwallsJun][int(nCell2ThickWalls[cid-NwallsJun])]=twpid
-                        nCell2ThickWalls[cid-NwallsJun]+=1
+                        x=position[wid][0]+cos(arctan(slopeCG))*general.thickness_disp/2*sign(position[cid][0]-position[wid][0]) #-> new position of the wall node on the current cell side
+                        y=position[wid][1]+sin(arctan(slopeCG))*general.thickness_disp/2*sign(position[cid][0]-position[wid][0])
+                        ThickWalls.append(array((twpid,wid,cid,x,y,inf,inf,Borderlink[wid]))) #Adds the thick wall node ID, its parent node ID, the associated cell ID, the new coordinates in X and Y, and the two neighbouring new junction walls IDs (not known at this point in the loop)     G.nodes[i]['borderlink']
+                        Cell2ThickWalls[cid-n_wall_junction][int(nCell2ThickWalls[cid-n_wall_junction])]=twpid
+                        nCell2ThickWalls[cid-n_wall_junction]+=1
                         ThickWallsX.append((twpidX,x,y,wid,cid)) #Adds the thick wall node ID, the new coordinates in X and Y, its parent node ID, the associated cell ID
                         ThickWallPolygonX[2*wid][int(nThickWallPolygonX[2*wid])]=twpidX #This one is for "polygon 1"
                         ThickWallPolygonX[2*wid+1][int(nThickWallPolygonX[2*wid+1])]=twpidX #This one for "polygon 2" (wid new thick nodes are included in two polygons)
                         nThickWallPolygonX[2*wid]+=1
                         nThickWallPolygonX[2*wid+1]+=1
-                        Wall2Cell[wid][int(nWall2Cell[wid])]=cid
+                        Wall2Cell[wid][int(nWall2Cell[wid][0])]=cid
                         nWall2Cell[wid]+=1
                         Wall2NewWall[wid][int(nWall2NewWall[wid])]=twpid
                         nWall2NewWall[wid]+=1  #the count in nWall2NewWall is actually the same as nWall2Cell 
@@ -790,9 +698,9 @@ def mecha(directory='./MECHA/',     #Project
                         nWall2NewWallX[wid]+=1
                         twpid+=1
                         twpidX+=1
-                        if Borderlink[wid]==1: #G.node[wid]['borderlink']==1:
-                            x=position[wid][0]-cos(arctan(slopeCG))*thickness_disp/2*sign(position[cid][0]-position[wid][0]) #-> new position of the wall node opposite to the current cell side
-                            y=position[wid][1]-sin(arctan(slopeCG))*thickness_disp/2*sign(position[cid][0]-position[wid][0])
+                        if Borderlink[wid]==1: #G.nodes[wid]['borderlink']==1:
+                            x=position[wid][0]-cos(arctan(slopeCG))*general.thickness_disp/2*sign(position[cid][0]-position[wid][0]) #-> new position of the wall node opposite to the current cell side
+                            y=position[wid][1]-sin(arctan(slopeCG))*general.thickness_disp/2*sign(position[cid][0]-position[wid][0])
                             ThickWallsX.append((twpidX,x,y,wid,inf))
                             ThickWallPolygonX[2*wid][int(nThickWallPolygonX[2*wid])]=twpidX #This one is for "polygon 1"
                             ThickWallPolygonX[2*wid+1][int(nThickWallPolygonX[2*wid+1])]=twpidX #This one for "polygon 2" (wid new thick nodes are included in two polygons)
@@ -801,95 +709,95 @@ def mecha(directory='./MECHA/',     #Project
                             Wall2NewWallX[wid][int(nWall2NewWallX[wid])]=twpidX
                             nWall2NewWallX[wid]+=1
                             twpidX+=1
-                    elif G.node[neighboor]['type']=='apo': #Node j is a junction
-                        Wall2Junction[wid][int(nWall2Junction[wid])]=indice[neighboor]
+                    elif G.nodes[neighboor]['type']=='apo': #Node j is a junction
+                        Wall2Junction[wid][int(nWall2Junction[wid][0])]=indice[neighboor]
                         nWall2Junction[wid]+=1
                 cid1=Wall2Cell[wid][0]
                 cid2=Wall2Cell[wid][1]
-                rank1=Cell_rank[int(cid1-NwallsJun)]
-                row1=rank2row[int(rank1)]
+                rank1=Cell_rank[int(cid1-n_wall_junction)]
+                row1=rank2row[int(rank1.item())][0]
                 if not isnan(cid2):
-                    rank2=Cell_rank[int(cid2-NwallsJun)]
-                    row2=rank2row[int(rank2)]
+                    rank2=Cell_rank[int(cid2-n_wall_junction)]
+                    row2=rank2row[int(rank2.item())][0]
                 if row1 <= rank2row[3] and row2 <= rank2row[3]: #Row on the stelar side
                     if not isnan(cid2):
-                        rad_pos=-((Layer_dist2[int(row1)]+Layer_dist2[int(row2)])/2 - xyl80_dist)/(Layer_dist[3] - xyl80_dist) #Radial position of the wall layer relative to the cortical layer closest to tthe xylem vessels (zero) and to the endodermis (1)
+                        rad_pos=-((Layer_dist2[int(row1)][0]+Layer_dist2[int(row2)][0])/2 - xyl80_dist)/(Layer_dist[3][0] - xyl80_dist) #Radial position of the wall layer relative to the cortical layer closest to tthe xylem vessels (zero) and to the endodermis (1)
                     else:
-                        rad_pos=-(Layer_dist2[int(row1)] - xyl80_dist)/(Layer_dist[3] - xyl80_dist) #Radial position of the wall layer relative to the cortical layer closest to the xylem vessels (zero) and to the endodermis (1)
+                        rad_pos=-(Layer_dist2[int(row1)][0] - xyl80_dist)/(Layer_dist[3][0] - xyl80_dist) #Radial position of the wall layer relative to the cortical layer closest to the xylem vessels (zero) and to the endodermis (1)
                     r_rel[wid]=max(min(rad_pos,-0.00001),-1)
                 else: #Positive r_rel means a wall on the cortical side of the endodermis
                     if not isnan(cid2):
-                        rad_pos=(Layer_dist[2]-(Layer_dist2[int(row1)]+Layer_dist2[int(row2)])/2)/(Layer_dist[2]-Layer_dist[3]) #Radial position of the wall layer relative to the cortical layer closest to the epidermis (zero) and to the endodermis (1)
+                        rad_pos=(Layer_dist[2][0]-(Layer_dist2[int(row1)][0]+Layer_dist2[int(row2)][0])/2)/(Layer_dist[2][0]-Layer_dist[3][0]) #Radial position of the wall layer relative to the cortical layer closest to the epidermis (zero) and to the endodermis (1)
                     else:
-                        rad_pos=(Layer_dist[2]-Layer_dist2[int(row1)])/(Layer_dist[2]-Layer_dist[3]) #Radial position of the wall layer relative to the cortical layer closest to the epidermis (zero) and to the endodermis (1)
+                        rad_pos=(Layer_dist[2][0]-Layer_dist2[int(row1)][0])/(Layer_dist[2][0]-Layer_dist[3][0]) #Radial position of the wall layer relative to the cortical layer closest to the epidermis (zero) and to the endodermis (1)
                     r_rel[wid]=min(max(rad_pos,0.00001),1)
             x_rel[wid]=(position[wid][0]-min_x_wall)/(max_x_wall-min_x_wall)
     else:
-        Wall2Cell=empty((Nwalls,2))
-        Wall2Cell[:]=NAN
-        nWall2Cell=zeros((Nwalls,1))
-        Junction2Wall2Cell=empty((NwallsJun-Nwalls,12))
-        Junction2Wall2Cell[:]=NAN
-        nJunction2Wall2Cell=zeros((NwallsJun-Nwalls,1))
-        Wall2Junction=empty((Nwalls,2))
-        Wall2Junction[:]=NAN
-        nWall2Junction=zeros((Nwalls,1))
-        r_rel=empty((Nwalls,1))
-        r_rel[:]=NAN
-        x_rel=empty((NwallsJun+Ncells,1))
-        x_rel[:]=NAN
-        L_diff=((abs(float(Layer_dist[3]-Layer_dist[2])*1.0E-04),abs(float(Layer_dist[3] - xyl80_dist)*1.0E-04))) #Diffusion lengths (cm)
-        for node, edges in G.adjacency_iter():
+        Wall2Cell=empty((n_walls,2))
+        Wall2Cell[:]=np.nan
+        nWall2Cell=zeros((n_walls,1))
+        Junction2Wall2Cell=empty((n_wall_junction-n_walls,12))
+        Junction2Wall2Cell[:]=np.nan
+        nJunction2Wall2Cell=zeros((n_wall_junction-n_walls,1))
+        Wall2Junction=empty((n_walls,2))
+        Wall2Junction[:]=np.nan
+        nWall2Junction=zeros((n_walls,1))
+        r_rel=empty((n_walls,1))
+        r_rel[:]=np.nan
+        x_rel=empty((n_wall_junction+n_cells,1))
+        x_rel[:]=np.nan
+        L_diff=((abs(float(Layer_dist[3][0]-Layer_dist[2][0])*1.0E-04),abs(float(Layer_dist[3][0] - xyl80_dist)*1.0E-04))) #Diffusion lengths (cm)
+        for node, edges in G.adjacency():
             wid=indice[node]
-            if wid<Nwalls: #wall that is not a junction (connected to a cell)
+            if wid<n_walls: #wall that is not a junction (connected to a cell)
                 for neighboor, eattr in edges.items(): #Loop on connections (edges)
                     cid=int(indice[neighboor])
-                    if G.node[cid]['type']=='cell':
-                        Wall2Cell[wid][int(nWall2Cell[wid])]=cid
+                    if G.nodes[cid]['type']=='cell':
+                        Wall2Cell[wid][int(nWall2Cell[wid][0])]=cid
                         nWall2Cell[wid]+=1
-                    elif G.node[neighboor]['type']=='apo': #Node j is a junction
-                        Wall2Junction[wid][int(nWall2Junction[wid])]=indice[neighboor]
+                    elif G.nodes[neighboor]['type']=='apo': #Node j is a junction
+                        Wall2Junction[wid][int(nWall2Junction[wid][0])]=indice[neighboor]
                         nWall2Junction[wid]+=1
                 cid1=Wall2Cell[wid][0]
                 cid2=Wall2Cell[wid][1]
-                rank1=Cell_rank[int(cid1-NwallsJun)]
-                row1=rank2row[int(rank1)]
+                rank1=Cell_rank[int(cid1-n_wall_junction)]
+                row1=rank2row[int(rank1.item())][0]
                 if not isnan(cid2):
-                    rank2=Cell_rank[int(cid2-NwallsJun)]
-                    row2=rank2row[int(rank2)]
+                    rank2=Cell_rank[int(cid2-n_wall_junction)]
+                    row2=rank2row[int(rank2.item())][0]
                 if row1 <= rank2row[3] and row2 <= rank2row[3]: #Row on the stelar side
                     if not isnan(cid2):
-                        rad_pos=-((Layer_dist2[int(row1)]+Layer_dist2[int(row2)])/2 - xyl80_dist)/(Layer_dist[3] - xyl80_dist) #Radial position of the wall layer relative to the cortical layer closest to tthe xylem vessels (zero) and to the endodermis (1)
+                        rad_pos=-((Layer_dist2[int(row1)][0]+Layer_dist2[int(row2)][0])/2 - xyl80_dist)/(Layer_dist[3][0] - xyl80_dist) #Radial position of the wall layer relative to the cortical layer closest to tthe xylem vessels (zero) and to the endodermis (1)
                     else:
-                        rad_pos=-(Layer_dist2[int(row1)] - xyl80_dist)/(Layer_dist[3] - xyl80_dist) #Radial position of the wall layer relative to the cortical layer closest to the xylem vessels (zero) and to the endodermis (1)
+                        rad_pos=-(Layer_dist2[int(row1)][0] - xyl80_dist)/(Layer_dist[3][0] - xyl80_dist) #Radial position of the wall layer relative to the cortical layer closest to the xylem vessels (zero) and to the endodermis (1)
                     r_rel[wid]=max(min(rad_pos,-0.00001),-1)
                 else: #Positive r_rel means a wall on the cortical side of the endodermis
                     if not isnan(cid2):
-                        rad_pos=(Layer_dist[2]-(Layer_dist2[int(row1)]+Layer_dist2[int(row2)])/2)/(Layer_dist[2]-Layer_dist[3]) #Radial position of the wall layer relative to the cortical layer closest to the epidermis (zero) and to the endodermis (1)
+                        rad_pos=(Layer_dist[2][0]-(Layer_dist2[int(row1)][0]+Layer_dist2[int(row2)][0])/2)/(Layer_dist[2][0]-Layer_dist[3][0]) #Radial position of the wall layer relative to the cortical layer closest to the epidermis (zero) and to the endodermis (1)
                     else:
-                        rad_pos=(Layer_dist[2]-Layer_dist2[int(row1)])/(Layer_dist[2]-Layer_dist[3]) #Radial position of the wall layer relative to the cortical layer closest to the epidermis (zero) and to the endodermis (1)
+                        rad_pos=(Layer_dist[2][0]-Layer_dist2[int(row1)][0])/(Layer_dist[2][0]-Layer_dist[3][0]) #Radial position of the wall layer relative to the cortical layer closest to the epidermis (zero) and to the endodermis (1)
                     r_rel[wid]=min(max(rad_pos,0.00001),1)
             x_rel[wid]=(position[wid][0]-min_x_wall)/(max_x_wall-min_x_wall)
     
-    if Paraview==1 or ParTrack==1 or Apo_Contagion>0 or Sym_Contagion>0:
-        for node, edges in G.adjacency_iter():
+    if general.paraview==1 or general.par_track==1 or general.apo_contagion>0 or general.sym_contagion>0:
+        for node, edges in G.adjacency():
             i=indice[node]
-            if i<Nwalls: #wall that is not a junction (connected to a cell)
+            if i<n_walls: #wall that is not a junction (connected to a cell)
                 for neighboor, eattr in edges.items(): #Loop on connections (edges) separated to make sure that Wall2Cell[i] is complete
                     j=indice[neighboor]
-                    if G.node[j]['type']=='apo': #then j is a junction node 
-                        for cid in Wall2Cell[i][0:int(nWall2Cell[i])]: #Wall2Cell[i][k] are the cell node ID associated to Wall i
-                            if cid not in Junction2Wall2Cell[j-Nwalls]: 
-                                Junction2Wall2Cell[j-Nwalls][int(nJunction2Wall2Cell[j-Nwalls])]=cid #Writes the cells indirectly associated to each junction
-                                nJunction2Wall2Cell[j-Nwalls]+=1
-                                Junction2Wall2[j-Nwalls][int(nJunction2Wall2[j-Nwalls])]=i #Writes the walls directly associated to each junction
-                                nJunction2Wall2[j-Nwalls]+=1  #the count in nJunction2Wall is actually the same as nJunction2Wall2Cell 
+                    if G.nodes[j]['type']=='apo': #then j is a junction node 
+                        for cid in Wall2Cell[i]: #Wall2Cell[i][k] are the cell node ID associated to Wall i
+                            if cid not in Junction2Wall2Cell[j-n_walls]: 
+                                Junction2Wall2Cell[j-n_walls][int(nJunction2Wall2Cell[j-n_walls][0])]=cid #Writes the cells indirectly associated to each junction
+                                nJunction2Wall2Cell[j-n_walls]+=1
+                                Junction2Wall2[j-n_walls][int(nJunction2Wall2[j-n_walls])]=i #Writes the walls directly associated to each junction
+                                nJunction2Wall2[j-n_walls]+=1  #the count in nJunction2Wall is actually the same as nJunction2Wall2Cell 
                             else: #Cell already associated to junction j through another wall => we can consider that the junction j is directly associated to the cell Wall2Cell[i][k] geometrically
                                 #Junction j is connected to a cell "cid" from two walls "i" and "wid1"
                                 #Find wid1
-                                for id1, val in enumerate(Junction2Wall2Cell[j-Nwalls]): 
+                                for id1, val in enumerate(Junction2Wall2Cell[j-n_walls]): 
                                     if val==cid: #Finding the position of the current cell in the list of cells related to the junction 
-                                        wid1=int(Junction2Wall2[j-Nwalls][id1]) #At the same position in Junction2Wall2 we can find the "other" wall ID (wid1) that was already associated to the same junction and cell
+                                        wid1=int(Junction2Wall2[j-n_walls][id1]) #At the same position in Junction2Wall2 we can find the "other" wall ID (wid1) that was already associated to the same junction and cell
                                         break
                                 #Find the thick wall node associated to wid1
                                 for id1, val in enumerate(Wall2Cell[wid1]): 
@@ -907,15 +815,15 @@ def mecha(directory='./MECHA/',     #Project
                                 else:
                                     slopeCG=inf
                                 #Calculating the position of the "thick junction node" on the side of cell cid
-                                x=position[j][0]+cos(arctan(slopeCG))*thicknessJunction_disp/2*sign(position[cid][0]-position[j][0])
-                                y=position[j][1]+sin(arctan(slopeCG))*thicknessJunction_disp/2*sign(position[cid][0]-position[j][0])
-                                ThickWalls.append(array((twpid,j,int(cid),x,y,twpid1,twpid2,Borderlink[j]))) #Adds the thick wall node ID, its parent node ID, the associated cell ID, the new coordinates in X and Y, and in this case, the two neighbouring walls that will consitute 2 neighbouring "cells" in the sense of pvtk     G.node[j]['borderlink']
+                                x=position[j][0]+cos(arctan(slopeCG))*general.thickness_junction_disp/2*sign(position[cid][0]-position[j][0])
+                                y=position[j][1]+sin(arctan(slopeCG))*general.thickness_junction_disp/2*sign(position[cid][0]-position[j][0])
+                                ThickWalls.append(array((twpid,j,int(cid),x,y,twpid1,twpid2,Borderlink[j]))) #Adds the thick wall node ID, its parent node ID, the associated cell ID, the new coordinates in X and Y, and in this case, the two neighbouring walls that will consitute 2 neighbouring "cells" in the sense of pvtk     G.nodes[j]['borderlink']
                                 ThickWalls[twpid1][int(5+nThickWalls[twpid1])]=twpid
                                 ThickWalls[twpid2][int(5+nThickWalls[twpid2])]=twpid
                                 nThickWalls[twpid1]+=1
                                 nThickWalls[twpid2]+=1
-                                Cell2ThickWalls[int(cid-NwallsJun)][int(nCell2ThickWalls[int(cid-NwallsJun)])]=twpid
-                                nCell2ThickWalls[int(cid-NwallsJun)]+=1
+                                Cell2ThickWalls[int(cid-n_wall_junction)][int(nCell2ThickWalls[int(cid-n_wall_junction)])]=twpid
+                                nCell2ThickWalls[int(cid-n_wall_junction)]+=1
                                 ThickWallsX.append((twpidX,x,y,j,cid,i,wid1)) #Adds the thick wall node ID, the new coordinates in X and Y, its parent (junction) node ID, the associated cell ID, the two original neighbouring walls
                                 #Which of the 2 polygons associated to wall node "i" do we add the thick junction node to?
                                 #Only one of the polygons is related to junction node "j". Need to look at position into Wall2Junction
@@ -942,16 +850,16 @@ def mecha(directory='./MECHA/',     #Project
                                 #Increase the wall count
                                 twpid+=1
                                 twpidX+=1
-                                if Borderlink[j]==1: #G.node[j]['borderlink']==1: #If the wall is at a border, there is only one cell => need to add the opposite new wall node independently
+                                if Borderlink[j]==1: #G.nodes[j]['borderlink']==1: #If the wall is at a border, there is only one cell => need to add the opposite new wall node independently
                                     if not slopeCG==0.0:
                                         slopeCG=-1/slopeCG
                                     else:
                                         slopeCG=inf
-                                    x=position[j][0]-cos(arctan(slopeCG))*thickness_disp/2*sign(position[cid][0]-position[j][0]) #-> new position of the wall node opposite to the current cell side
-                                    y=position[j][1]-sin(arctan(slopeCG))*thickness_disp/2*sign(position[cid][0]-position[j][0])
+                                    x=position[j][0]-cos(arctan(slopeCG))*general.thickness_disp/2*sign(position[cid][0]-position[j][0]) #-> new position of the wall node opposite to the current cell side
+                                    y=position[j][1]-sin(arctan(slopeCG))*general.thickness_disp/2*sign(position[cid][0]-position[j][0])
                                     ThickWallsX.append((twpidX,x,y,j,inf,i))
                                     #This new wall node is added to the border polygon. Is the border polygon associated to wall node "i" or "wid1"?
-                                    if Borderlink[i]==1: #G.node[i]['borderlink']==1:
+                                    if Borderlink[i]==1: #G.nodes[i]['borderlink']==1:
                                         wid=i
                                     else:
                                         wid=wid1
@@ -970,24 +878,24 @@ def mecha(directory='./MECHA/',     #Project
                                     nWall2NewWallX[j]+=1
                                     twpidX+=1
     else:
-        for node, edges in G.adjacency_iter():
+        for node, edges in G.adjacency():
             i=indice[node]
-            if i<Nwalls: #wall that is not a junction (connected to a cell)
+            if i<n_walls: #wall that is not a junction (connected to a cell)
                 for neighboor, eattr in edges.items(): #Loop on connections (edges) separated to make sure that Wall2Cell[i] is complete
                     j=indice[neighboor]
-                    if G.node[j]['type']=='apo': #then j is a junction node 
-                        for cid in Wall2Cell[i][0:int(nWall2Cell[i])]: #Wall2Cell[i][k] are the cell node ID associated to Wall i
-                            if cid not in Junction2Wall2Cell[j-Nwalls]: 
-                                Junction2Wall2Cell[j-Nwalls][int(nJunction2Wall2Cell[j-Nwalls])]=cid #Writes the cells indirectly associated to each junction
-                                nJunction2Wall2Cell[j-Nwalls]+=1
+                    if G.nodes[j]['type']=='apo': #then j is a junction node 
+                        for cid in Wall2Cell[i]: #Wall2Cell[i][k] are the cell node ID associated to Wall i
+                            if cid not in Junction2Wall2Cell[j-n_walls]: 
+                                Junction2Wall2Cell[j-n_walls][int(nJunction2Wall2Cell[j-n_walls][0])]=cid #Writes the cells indirectly associated to each junction
+                                nJunction2Wall2Cell[j-n_walls]+=1
     
-    if Paraview==1 or ParTrack==1 or Apo_Contagion>0 or Sym_Contagion>0:
+    if general.paraview==1 or general.par_track==1 or general.apo_contagion>0 or general.sym_contagion>0:
         Apo_j_Zombies0=[]
         Apo_j_cc=[]
-        for j in range(Nwalls, NwallsJun):
-            for cid in Junction2Wall2Cell[j-Nwalls]:
-                if cid-NwallsJun in Apo_Zombie0:
-                    cc=Apo_cc[Apo_Zombie0.index(cid-NwallsJun)]
+        for j in range(n_walls, n_wall_junction):
+            for cid in Junction2Wall2Cell[j-n_walls]:
+                if cid-n_wall_junction in hormones.apo_zombie0:
+                    cc=hormones.apo_cc[hormones.apo_zombie0.index(cid-n_wall_junction)]
                     if j not in Apo_j_Zombies0:
                         Apo_j_Zombies0.append(j)
                         Apo_j_cc.append(cc)
@@ -995,44 +903,44 @@ def mecha(directory='./MECHA/',     #Project
     
     #Import Hydraulic data
     print('Importing hydraulic data')
-    kwrange=etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('kwrange/kw')
-    kw_barrier_range=etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('kw_barrier_range/kw_barrier')
-    kmb=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('km')[0].get("value"))
-    kAQPrange=etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('kAQPrange/kAQP')
+    kwrange=etree.parse(Hydr).getroot().xpath('kwrange/kw')
+    kw_barrier_range=etree.parse(Hydr).getroot().xpath('kw_barrier_range/kw_barrier')
+    kmb=float(etree.parse(Hydr).getroot().xpath('km')[0].get("value"))
+    kAQPrange=etree.parse(Hydr).getroot().xpath('kAQPrange/kAQP')
     
-    ratio_cortex=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('ratio_cortex')[0].get("value"))
-    Kplrange=etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('Kplrange/Kpl')
-    Fplxheight=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('Fplxheight')[0].get("value")) #Product of plasmodesmatal frequency (per square cm) by cell axial length when the frequency was counted (cm) => units: per cm of cell membrane perimeter, to be multiplied by cell perimeter in cm to obtain a quantity of plasmodesmata
-    Fplxheight_epi_exo=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('Fplxheight_epi_exo')[0].get("value")) #Because they are "cell axial length independent", these values conserve the quantity of plasmodesmata when cells elongate
-    Fplxheight_outer_cortex=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('Fplxheight_outer_cortex')[0].get("value"))
-    Fplxheight_cortex_cortex=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('Fplxheight_cortex_cortex')[0].get("value"))
-    Fplxheight_cortex_endo=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('Fplxheight_cortex_endo')[0].get("value"))
-    Fplxheight_endo_endo=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('Fplxheight_endo_endo')[0].get("value"))
-    Fplxheight_endo_peri=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('Fplxheight_endo_peri')[0].get("value"))
-    Fplxheight_peri_peri=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('Fplxheight_peri_peri')[0].get("value"))
-    Fplxheight_peri_stele=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('Fplxheight_peri_stele')[0].get("value"))
-    Fplxheight_stele_stele=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('Fplxheight_stele_stele')[0].get("value"))
-    Fplxheight_stele_comp=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('Fplxheight_stele_comp')[0].get("value"))
-    Fplxheight_peri_comp=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('Fplxheight_peri_comp')[0].get("value"))
-    Fplxheight_comp_comp=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('Fplxheight_comp_comp')[0].get("value"))
-    Fplxheight_comp_sieve=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('Fplxheight_comp_sieve')[0].get("value"))
-    Fplxheight_peri_sieve=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('Fplxheight_peri_sieve')[0].get("value"))
-    Fplxheight_stele_sieve=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('Fplxheight_stele_sieve')[0].get("value"))
-    K_sieve=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('K_sieve')[0].get("value")) #Sieve tube hydraulic conductance
-    K_xyl=float(etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('K_xyl')[0].get("value")) #Xylem vessel axial hydraulic conductance
-    Xcontactrange=etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('Xcontactrange/Xcontact')
-    path_hydraulics=etree.parse(directory + Project + 'in/' + Hydr).getroot().xpath('path_hydraulics/Output')
+    ratio_cortex=float(etree.parse(Hydr).getroot().xpath('ratio_cortex')[0].get("value"))
+    Kplrange=etree.parse(Hydr).getroot().xpath('Kplrange/Kpl')
+    Fplxheight=float(etree.parse(Hydr).getroot().xpath('Fplxheight')[0].get("value")) #Product of plasmodesmatal frequency (per square cm) by cell axial length when the frequency was counted (cm) => units: per cm of cell membrane perimeter, to be multiplied by cell perimeter in cm to obtain a quantity of plasmodesmata
+    Fplxheight_epi_exo=float(etree.parse(Hydr).getroot().xpath('Fplxheight_epi_exo')[0].get("value")) #Because they are "cell axial length independent", these values conserve the quantity of plasmodesmata when cells elongate
+    Fplxheight_outer_cortex=float(etree.parse(Hydr).getroot().xpath('Fplxheight_outer_cortex')[0].get("value"))
+    Fplxheight_cortex_cortex=float(etree.parse(Hydr).getroot().xpath('Fplxheight_cortex_cortex')[0].get("value"))
+    Fplxheight_cortex_endo=float(etree.parse(Hydr).getroot().xpath('Fplxheight_cortex_endo')[0].get("value"))
+    Fplxheight_endo_endo=float(etree.parse(Hydr).getroot().xpath('Fplxheight_endo_endo')[0].get("value"))
+    Fplxheight_endo_peri=float(etree.parse(Hydr).getroot().xpath('Fplxheight_endo_peri')[0].get("value"))
+    Fplxheight_peri_peri=float(etree.parse(Hydr).getroot().xpath('Fplxheight_peri_peri')[0].get("value"))
+    Fplxheight_peri_stele=float(etree.parse(Hydr).getroot().xpath('Fplxheight_peri_stele')[0].get("value"))
+    Fplxheight_stele_stele=float(etree.parse(Hydr).getroot().xpath('Fplxheight_stele_stele')[0].get("value"))
+    Fplxheight_stele_comp=float(etree.parse(Hydr).getroot().xpath('Fplxheight_stele_comp')[0].get("value"))
+    Fplxheight_peri_comp=float(etree.parse(Hydr).getroot().xpath('Fplxheight_peri_comp')[0].get("value"))
+    Fplxheight_comp_comp=float(etree.parse(Hydr).getroot().xpath('Fplxheight_comp_comp')[0].get("value"))
+    Fplxheight_comp_sieve=float(etree.parse(Hydr).getroot().xpath('Fplxheight_comp_sieve')[0].get("value"))
+    Fplxheight_peri_sieve=float(etree.parse(Hydr).getroot().xpath('Fplxheight_peri_sieve')[0].get("value"))
+    Fplxheight_stele_sieve=float(etree.parse(Hydr).getroot().xpath('Fplxheight_stele_sieve')[0].get("value"))
+    K_sieve=float(etree.parse(Hydr).getroot().xpath('K_sieve')[0].get("value")) #Sieve tube hydraulic conductance
+    K_xyl=float(etree.parse(Hydr).getroot().xpath('K_xyl')[0].get("value")) #Xylem vessel axial hydraulic conductance
+    Xcontactrange=etree.parse(Hydr).getroot().xpath('Xcontactrange/Xcontact')
+    path_hydraulics=etree.parse(Hydr).getroot().xpath('path_hydraulics/Output')
     
     #Import boundary conditions
-    Psi_soil_range=etree.parse(directory + Project + 'in/' + BC).getroot().xpath('Psi_soil_range/Psi_soil')
-    BC_xyl_range=etree.parse(directory + Project + 'in/' + BC).getroot().xpath('BC_xyl_range/BC_xyl')
-    BC_sieve_range=etree.parse(directory + Project + 'in/' + BC).getroot().xpath('BC_sieve_range/BC_sieve')
-    Psi_cell_range=etree.parse(directory + Project + 'in/' + BC).getroot().xpath('Psi_cell_range/Psi_cell')
-    Elong_cell_range=etree.parse(directory + Project + 'in/' + BC).getroot().xpath('Elong_cell_range/Elong_cell')
-    #Elong_cell_kappa=float(etree.parse(directory + Project + 'in/' + BC).getroot().xpath('Elong_cell')[0].get("kappa_dot")) #Rate change of curvature (radian/micron/d)
-    Water_fraction_apo=float(etree.parse(directory + Project + 'in/' + BC).getroot().xpath('Water_fractions')[0].get("Apoplast")) #Relative volumetric fraction of water in the apoplast (dimensionless)
-    Water_fraction_sym=float(etree.parse(directory + Project + 'in/' + BC).getroot().xpath('Water_fractions')[0].get("Symplast")) #Relative volumetric fraction of water in the symplast (dimensionless)
-    path_BC=etree.parse(directory + Project + 'in/' + BC).getroot().xpath('path_scenarios/Output')[0].get("path")
+    Psi_soil_range=etree.parse(BC).getroot().xpath('Psi_soil_range/Psi_soil')
+    BC_xyl_range=etree.parse(BC).getroot().xpath('BC_xyl_range/BC_xyl')
+    BC_sieve_range=etree.parse(BC).getroot().xpath('BC_sieve_range/BC_sieve')
+    Psi_cell_range=etree.parse(BC).getroot().xpath('Psi_cell_range/Psi_cell')
+    Elong_cell_range=etree.parse(BC).getroot().xpath('Elong_cell_range/Elong_cell')
+    #Elong_cell_kappa=float(etree.parse(BC).getroot().xpath('Elong_cell')[0].get("kappa_dot")) #Rate change of curvature (radian/micron/d)
+    Water_fraction_apo=float(etree.parse(BC).getroot().xpath('Water_fractions')[0].get("Apoplast")) #Relative volumetric fraction of water in the apoplast (dimensionless)
+    Water_fraction_sym=float(etree.parse(BC).getroot().xpath('Water_fractions')[0].get("Symplast")) #Relative volumetric fraction of water in the symplast (dimensionless)
+    path_BC=etree.parse(BC).getroot().xpath('path_scenarios/Output')[0].get("path")
     Nhydraulics=len(path_hydraulics) #Total number of hydraulic parameters sets
     Nkw=len(kwrange)
     NKpl=len(Kplrange)
@@ -1040,7 +948,7 @@ def mecha(directory='./MECHA/',     #Project
     NXcontact=len(Xcontactrange)
     Nkw_barrier=len(kw_barrier_range)
     Nscenarios=len(Psi_soil_range) #Including the "forced scenario"
-    Nmaturity=len(Maturityrange)
+    Nmaturity=len(geometry.maturity_elems)
     Psi_soil=zeros((2,Nscenarios))
     Os_soil=zeros((6,Nscenarios))
     Os_xyl=zeros((6,Nscenarios))
@@ -1052,14 +960,14 @@ def mecha(directory='./MECHA/',     #Project
         Os_soil[1][count]=float(Psi_soil_range[count].get("osmotic_right"))
         Os_soil[2][count]=float(Psi_soil_range[count].get("osmotic_symmetry"))
         Os_soil[3][count]=float(Psi_soil_range[count].get("osmotic_shape")) #1 for linear, >1 for outer slope flat, <1 for inner slope flat
-        Os_soil[4][count]=float(etree.parse(directory + Project + 'in/' + BC).getroot().xpath('Psi_soil_range/osmotic_diffusivity')[0].get("value"))
-        #Os_soil[5][count]=float(etree.parse(directory + Project + 'in/' + BC).getroot().xpath('Psi_soil_range/osmotic_convection')[0].get("flag"))
+        Os_soil[4][count]=float(etree.parse(BC).getroot().xpath('Psi_soil_range/osmotic_diffusivity')[0].get("value"))
+        #Os_soil[5][count]=float(etree.parse(BC).getroot().xpath('Psi_soil_range/osmotic_convection')[0].get("flag"))
         Os_xyl[0][count]=float(BC_xyl_range[count].get("osmotic_xyl"))
         Os_xyl[1][count]=float(BC_xyl_range[count].get("osmotic_endo"))
         Os_xyl[2][count]=float(BC_xyl_range[count].get("osmotic_symmetry"))
         Os_xyl[3][count]=float(BC_xyl_range[count].get("osmotic_shape")) #The symmetry is central. 1 for linear, >1 for outer slope flat, <1 for inner slope flat
-        Os_xyl[4][count]=float(etree.parse(directory + Project + 'in/' + BC).getroot().xpath('BC_xyl_range/osmotic_diffusivity')[0].get("value"))
-        #Os_xyl[5][count]=float(etree.parse(directory + Project + 'in/' + BC).getroot().xpath('BC_xyl_range/osmotic_convection')[0].get("flag"))
+        Os_xyl[4][count]=float(etree.parse(BC).getroot().xpath('BC_xyl_range/osmotic_diffusivity')[0].get("value"))
+        #Os_xyl[5][count]=float(etree.parse(BC).getroot().xpath('BC_xyl_range/osmotic_convection')[0].get("flag"))
         if not Os_xyl[4][count]==0 and not Os_soil[4][count]==0:
             C_flag=True
             print('Calculation of analytical solution for radial solute transport in cell walls')
@@ -1072,25 +980,27 @@ def mecha(directory='./MECHA/',     #Project
     for h in range(Nhydraulics):
         #print('   ')
         #print('Hydraulic network #'+str(h))
-        newpath=directory+Project+Output_path+Plant+'/'+path_BC+path_hydraulics[h].get("path")
+        newpath=outdir+'/'+geometry.plant_name+'/'
+        print("hydraulics")
+        print(newpath)
         if not os.path.exists(newpath):
             os.makedirs(newpath)
         
         #System solving
         Psi_xyl=empty((Nmaturity,Nscenarios))
-        Psi_xyl[:]=NAN
+        Psi_xyl[:]=np.nan
         dPsi_xyl=empty((Nmaturity,Nscenarios))
-        dPsi_xyl[:]=NAN
-        iEquil_xyl=NAN #index of the equilibrium root xylem pressure scenario
+        dPsi_xyl[:]=np.nan
+        iEquil_xyl=np.nan #index of the equilibrium root xylem pressure scenario
         Flow_xyl=empty((Nxyl+1,Nscenarios))
-        Flow_xyl[:]=NAN
+        Flow_xyl[:]=np.nan
         Psi_sieve=empty((Nmaturity,Nscenarios))
-        Psi_sieve[:]=NAN
+        Psi_sieve[:]=np.nan
         dPsi_sieve=empty((Nmaturity,Nscenarios))
-        dPsi_sieve[:]=NAN
-        iEquil_sieve=NAN #index of the equilibrium root phloem pressure scenario
+        dPsi_sieve[:]=np.nan
+        iEquil_sieve=np.nan #index of the equilibrium root phloem pressure scenario
         Flow_sieve=empty((Nsieve+1,Nscenarios))
-        Flow_sieve[:]=NAN
+        Flow_sieve[:]=np.nan
         Os_sieve=zeros((1,Nscenarios))
         Os_cortex=zeros((1,Nscenarios))
         Os_hetero=zeros((1,Nscenarios))
@@ -1098,34 +1008,34 @@ def mecha(directory='./MECHA/',     #Project
         s_hetero=zeros((1,Nscenarios))
         Elong_cell=zeros((1,Nscenarios))
         Elong_cell_side_diff=zeros((1,Nscenarios))
-        UptakeLayer_plus=zeros((int(r_discret[0]),Nmaturity,Nscenarios))
-        UptakeLayer_minus=zeros((int(r_discret[0]),Nmaturity,Nscenarios))
-        Q_xyl_layer=zeros((int(r_discret[0]),Nmaturity,Nscenarios))
-        Q_sieve_layer=zeros((int(r_discret[0]),Nmaturity,Nscenarios))
-        Q_elong_layer=zeros((int(r_discret[0]),Nmaturity,Nscenarios))
+        UptakeLayer_plus=zeros((int(r_discret[0][0]),Nmaturity,Nscenarios))
+        UptakeLayer_minus=zeros((int(r_discret[0][0]),Nmaturity,Nscenarios))
+        Q_xyl_layer=zeros((int(r_discret[0][0]),Nmaturity,Nscenarios))
+        Q_sieve_layer=zeros((int(r_discret[0][0]),Nmaturity,Nscenarios))
+        Q_elong_layer=zeros((int(r_discret[0][0]),Nmaturity,Nscenarios))
         STFmb=zeros((Nmb,Nmaturity))
-        STFcell_plus=zeros((Ncells,Nmaturity))
-        STFcell_minus=zeros((Ncells,Nmaturity))
-        STFlayer_plus=zeros((int(r_discret[0]),Nmaturity))
-        STFlayer_minus=zeros((int(r_discret[0]),Nmaturity))
-        PsiCellLayer=zeros((int(r_discret[0]),Nmaturity,Nscenarios))
-        PsiWallLayer=zeros((int(r_discret[0]),Nmaturity,Nscenarios))
-        OsCellLayer=zeros((int(r_discret[0]),Nmaturity,Nscenarios))
-        nOsCellLayer=zeros((int(r_discret[0]),Nmaturity,Nscenarios))
-        OsWallLayer=zeros((int(r_discret[0]),Nmaturity,Nscenarios))
-        nOsWallLayer=zeros((int(r_discret[0]),Nmaturity,Nscenarios)) #Used for averaging OsWallLayer
-        NWallLayer=zeros((int(r_discret[0]),Nmaturity,Nscenarios))
+        STFcell_plus=zeros((n_cells,Nmaturity))
+        STFcell_minus=zeros((n_cells,Nmaturity))
+        STFlayer_plus=zeros((int(r_discret[0][0]),Nmaturity))
+        STFlayer_minus=zeros((int(r_discret[0][0]),Nmaturity))
+        PsiCellLayer=zeros((int(r_discret[0][0]),Nmaturity,Nscenarios))
+        PsiWallLayer=zeros((int(r_discret[0][0]),Nmaturity,Nscenarios))
+        OsCellLayer=zeros((int(r_discret[0][0]),Nmaturity,Nscenarios))
+        nOsCellLayer=zeros((int(r_discret[0][0]),Nmaturity,Nscenarios))
+        OsWallLayer=zeros((int(r_discret[0][0]),Nmaturity,Nscenarios))
+        nOsWallLayer=zeros((int(r_discret[0][0]),Nmaturity,Nscenarios)) #Used for averaging OsWallLayer
+        NWallLayer=zeros((int(r_discret[0][0]),Nmaturity,Nscenarios))
         #UptakeDistri_plus=zeros((40,3,8))#the size will be adjusted, but won't be more than 40. Dimension 1: radial position, 2: compartment, 3: scenario
         #UptakeDistri_minus=zeros((40,3,8))
         Q_tot=zeros((Nmaturity,Nscenarios)) #(cm^3/d) Total flow rate at root surface
         kr_tot=zeros((Nmaturity,1))
         Hydropatterning=empty((Nmaturity,Nscenarios))
-        Hydropatterning[:]=NAN
+        Hydropatterning[:]=np.nan
         Hydrotropism=empty((Nmaturity,Nscenarios))
-        Hydrotropism[:]=NAN
+        Hydrotropism[:]=np.nan
         
         iMaturity=-1 #Iteration index in the Barriers loop
-        for Maturity in Maturityrange:
+        for Maturity in geometry.maturity_elems:
             Barrier=int(Maturity.get("Barrier")) #Apoplastic barriers (0: No apoplastic barrier, 1:Endodermis radial walls, 2:Endodermis with passage cells, 3: Endodermis full, 4: Endodermis full and exodermis radial walls)
             height=int(Maturity.get("height")) #Cell length in the axial direction (microns)
             
@@ -1147,7 +1057,7 @@ def mecha(directory='./MECHA/',     #Project
                     sum_area=0
                     i=1
                     for cid in listxyl:
-                        area=cellarea[cid-NwallsJun]
+                        area=cellarea[cid-n_wall_junction]
                         Flow_xyl[i][count]=tot_flow*area
                         sum_area+=area
                         i+=1
@@ -1177,7 +1087,7 @@ def mecha(directory='./MECHA/',     #Project
                     sum_area=0
                     i=1
                     for cid in listprotosieve:
-                        area=cellarea[cid-NwallsJun]
+                        area=cellarea[cid-n_wall_junction]
                         Flow_sieve[i][count]=tot_flow*area
                         sum_area+=area
                         i+=1
@@ -1199,23 +1109,23 @@ def mecha(directory='./MECHA/',     #Project
                     print('Error: Cannot have both pressure and pressure change relative to equilibrium as phloem boundary condition')
             
             #Soil - root contact limit
-            if NXcontact is Nhydraulics:
+            if NXcontact == Nhydraulics:
                 Xcontact=float(Xcontactrange[h].get("value")) #(micrometers) X threshold coordinate of contact between soil and root (lower X not in contact with soil)
-            elif NXcontact is 1:
+            elif NXcontact == 1:
                 Xcontact=float(Xcontactrange[0].get("value"))
             else:
                 Xcontact=float(Xcontactrange[int(h/(NkAQP*NKpl*Nkw*Nkw_barrier))].get("value")) #OK
             
             #Cell wall hydraulic conductivity
-            if Nkw is Nhydraulics:
+            if Nkw == Nhydraulics:
                 kw = float(kwrange[h].get("value"))
-            elif Nkw is 1:
+            elif Nkw == 1:
                 kw = float(kwrange[0].get("value"))
             else:
                 kw = float(kwrange[int(h/(NkAQP*NKpl))%Nkw].get("value"))
-            if Nkw_barrier is Nhydraulics:
+            if Nkw_barrier == Nhydraulics:
                 kw_barrier = float(kw_barrier_range[h].get("value"))
-            elif Nkw_barrier is 1:
+            elif Nkw_barrier == 1:
                 kw_barrier = float(kw_barrier_range[0].get("value"))
             else:
                 kw_barrier = float(kw_barrier_range[int(h/(NkAQP*NKpl*Nkw))%Nkw_barrier].get("value"))
@@ -1258,18 +1168,18 @@ def mecha(directory='./MECHA/',     #Project
                 kw_passage=kw_barrier #(cm^2/hPa/d) hydraulic conductivity of passage cells tangential walls
             
             #Plasmodesmatal hydraulic conductance
-            if NKpl is Nhydraulics:
+            if NKpl == Nhydraulics:
                 iPD=h
-            elif NKpl is 1:
+            elif NKpl == 1:
                 iPD=0
             else:
                 iPD=int(h/NkAQP)%NKpl
             Kpl = float(Kplrange[iPD].get("value"))
             
             #Contribution of aquaporins to membrane hydraulic conductivity
-            if NkAQP is Nhydraulics:
+            if NkAQP == Nhydraulics:
                 iAQP=h
-            elif NkAQP is 1:
+            elif NkAQP == 1:
                 iAQP=0
             else:
                 iAQP=h%NkAQP
@@ -1287,12 +1197,12 @@ def mecha(directory='./MECHA/',     #Project
             else:
                 tot_surf_cortex=0.0 #Total membrane exchange surface in cortical cells (square centimeters)
                 temp=0.0 #Term for summation (cm3)
-                for w in Cell2Wall_loop: #Loop on cells. Cell2Wall_loop contains cell wall groups info (one group by cell)
+                for w in cellset['cell_to_wall']: #Loop on cells. cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
                     cellnumber1 = int(w.getparent().get("id")) #Cell ID number
                     for r in w: #Loop for wall elements around the cell
                         wid= int(r.get("id")) #Cell wall ID
-                        if G.node[NwallsJun + cellnumber1]['cgroup']==4: #Cortex
-                            dist_cell=sqrt(square(position[wid][0]-position[NwallsJun+cellnumber1][0])+square(position[wid][1]-position[NwallsJun+cellnumber1][1])) #distance between wall node and cell node (micrometers)
+                        if G.nodes[n_wall_junction + cellnumber1]['cgroup']==4: #Cortex
+                            dist_cell=sqrt(square(position[wid][0]-position[n_wall_junction+cellnumber1][0])+square(position[wid][1]-position[n_wall_junction+cellnumber1][1])) #distance between wall node and cell node (micrometers)
                             surf=(height+dist_cell)*lengths[wid]*1.0E-08 #(square centimeters)
                             temp+=surf*1.0E-04*(dist_grav[wid]+(ratio_cortex*dmax_cortex-dmin_cortex)/(1-ratio_cortex))
                             tot_surf_cortex+=surf
@@ -1304,68 +1214,68 @@ def mecha(directory='./MECHA/',     #Project
             ######################
             
             matrix_W = np.zeros(((G.number_of_nodes()),G.number_of_nodes())) #Initializes the Doussan matrix
-            if Apo_Contagion==2 and Sym_Contagion==2:
+            if general.apo_contagion==2 and general.sym_contagion==2:
                 matrix_C = np.zeros(((G.number_of_nodes()),G.number_of_nodes())) #Initializes the matrix of convection diffusion
                 rhs_C = np.zeros((G.number_of_nodes(),1)) #Initializing the right-hand side matrix of solute apoplastic concentrations
-                for i in range(Nwalls):
+                for i in range(n_walls):
                     if i in Apo_w_Zombies0:
                         matrix_C[i][i]=1.0
                         rhs_C[i][0]=Apo_w_cc[Apo_w_Zombies0.index(i)] #1.0 #Concentration in source wall i defined in Geom
                     else: #Decomposition rate (mol decomp/mol-day * cm^3)
-                        matrix_C[i][i]-=Degrad1*1.0E-12*(lat_dists[i][0]*thickness*lengths[i]+height*thickness*lengths[i]/2-square(thickness)*lengths[i])
-                for j in range(Nwalls,NwallsJun):
+                        matrix_C[i][i]-=hormones.degrad1*1.0E-12*(lat_dists[i][0]*geometry.thickness*lengths[i]+height*geometry.thickness*lengths[i]/2-square(geometry.thickness)*lengths[i])
+                for j in range(n_walls,n_wall_junction):
                     if j in Apo_j_Zombies0:
                         matrix_C[j][j]=1.0
                         rhs_C[j][0]=Apo_j_cc[Apo_j_Zombies0.index(j)] #1.0 #Concentration in source junction j defined in Geom
                     else: #Decomposition rate (mol decomp/mol-day * cm^3)
-                        matrix_C[j][j]-=Degrad1*1.0E-12*height*thickness*lengths[j]/2
-                for cellnumber1 in range(Ncells):
-                    if cellnumber1 in Sym_Zombie0:
-                        matrix_C[NwallsJun+cellnumber1][NwallsJun+cellnumber1]=1.0
-                        rhs_C[NwallsJun+cellnumber1][0]=Sym_cc[Sym_Zombie0.index(cellnumber1)] #1.0 #Concentration in source protoplasts defined in Geom
+                        matrix_C[j][j]-=hormones.degrad1*1.0E-12*height*geometry.thickness*lengths[j]/2
+                for cellnumber1 in range(n_cells):
+                    if cellnumber1 in hormones.sym_zombie0:
+                        matrix_C[n_wall_junction+cellnumber1][n_wall_junction+cellnumber1]=1.0
+                        rhs_C[n_wall_junction+cellnumber1][0]=hormones.sym_cc[hormones.sym_zombie0.index(cellnumber1)] #1.0 #Concentration in source protoplasts defined in Geom
                     else: #Decomposition rate (mol decomp/mol-day * cm^3)
-                        matrix_C[NwallsJun+cellnumber1][NwallsJun+cellnumber1]-=Degrad1*1.0E-12*cellarea[cellnumber1]*height
-            elif Apo_Contagion==2:
-                matrix_ApoC = np.zeros(((NwallsJun),NwallsJun)) #Initializes the matrix of convection
-                rhs_ApoC = np.zeros((NwallsJun,1)) #Initializing the right-hand side matrix of solute apoplastic concentrations
-                for i in range(Nwalls):
+                        matrix_C[n_wall_junction+cellnumber1][n_wall_junction+cellnumber1]-=hormones.degrad1*1.0E-12*cellarea[cellnumber1]*height
+            elif general.apo_contagion==2:
+                matrix_ApoC = np.zeros(((n_wall_junction),n_wall_junction)) #Initializes the matrix of convection
+                rhs_ApoC = np.zeros((n_wall_junction,1)) #Initializing the right-hand side matrix of solute apoplastic concentrations
+                for i in range(n_walls):
                     if i in Apo_w_Zombies0:
                         matrix_ApoC[i][i]=1.0
                         rhs_ApoC[i][0]=Apo_w_cc[Apo_w_Zombies0.index(i)] #1 #Concentration in source wall i equals 1 by default
                     else: #Decomposition rate (mol decomp/mol-day * cm^3)
-                        matrix_ApoC[i][i]-=Degrad1*1.0E-12*(lat_dists[i][0]*thickness*lengths[i]+height*thickness*lengths[i]/2-square(thickness)*lengths[i])
-                for j in range(Nwalls,NwallsJun):
+                        matrix_ApoC[i][i]-=hormones.degrad1*1.0E-12*(lat_dists[i][0]*geometry.thickness*lengths[i]+height*geometry.thickness*lengths[i]/2-square(geometry.thickness)*lengths[i])
+                for j in range(n_walls,n_wall_junction):
                     if j in Apo_j_Zombies0:
                         matrix_ApoC[j][j]=1.0
                         rhs_ApoC[j][0]=Apo_j_cc[Apo_j_Zombies0.index(j)] #1 #Concentration in source junction j equals 1 by default
                     else: #Decomposition rate (mol decomp/mol-day * cm^3)
-                        matrix_ApoC[j][j]-=Degrad1*1.0E-12*height*thickness*lengths[j]/2
-            elif Sym_Contagion==2:
-                matrix_SymC = np.zeros(((Ncells),Ncells)) #Initializes the matrix of convection
-                rhs_SymC = np.zeros((Ncells,1)) #Initializing the right-hand side matrix of solute symplastic concentrations
-                for cellnumber1 in range(Ncells):
-                    if cellnumber1 in Sym_Zombie0:
+                        matrix_ApoC[j][j]-=hormones.degrad1*1.0E-12*height*geometry.thickness*lengths[j]/2
+            elif general.sym_contagion==2:
+                matrix_SymC = np.zeros(((n_cells),n_cells)) #Initializes the matrix of convection
+                rhs_SymC = np.zeros((n_cells,1)) #Initializing the right-hand side matrix of solute symplastic concentrations
+                for cellnumber1 in range(n_cells):
+                    if cellnumber1 in hormones.sym_zombie0:
                         matrix_SymC[cellnumber1][cellnumber1]=1.0
-                        rhs_SymC[cellnumber1][0]=Sym_cc[Sym_Zombie0.index(cellnumber1)] #1 #Concentration in source protoplasts equals 1 by default
+                        rhs_SymC[cellnumber1][0]=hormones.sym_cc[hormones.sym_zombie0.index(cellnumber1)] #1 #Concentration in source protoplasts equals 1 by default
                     else: #Decomposition rate (mol decomp/mol-day * cm^3)
-                        matrix_SymC[cellnumber1][cellnumber1]-=Degrad1*1.0E-12*cellarea[cellnumber1]*height
+                        matrix_SymC[cellnumber1][cellnumber1]-=hormones.degrad1*1.0E-12*cellarea[cellnumber1]*height
             
             Kmb=zeros((Nmb,1)) #Stores membranes conductances for the second K loop
             jmb=0 #Index of membrane in Kmb
             K_axial=zeros((Ntot,1)) #Vector of apoplastic and plasmodesmatal axial conductances
             if Barrier>0: #K_xyl_spec calculated from Poiseuille law (cm^3/hPa/d)
                 for cid in listxyl:
-                    K_axial[cid]=cellarea[cid-NwallsJun]**2/(8*3.141592*height*1.0E-05/3600/24)*1.0E-12 #(micron^4/micron)->(cm^3) & (1.0E-3 Pa.s)->(1.0E-05/3600/24 hPa.d) 
+                    K_axial[cid]=cellarea[cid-n_wall_junction]**2/(8*3.141592*height*1.0E-05/3600/24)*1.0E-12 #(micron^4/micron)->(cm^3) & (1.0E-3 Pa.s)->(1.0E-05/3600/24 hPa.d) 
                 K_xyl_spec=sum(K_axial)*height/1.0E04
                 for cid in listsieve:
-                    K_axial[cid]=cellarea[cid-NwallsJun]**2/(8*3.141592*height*1.0E-05/3600/24)*1.0E-12 #(micron^4/micron)->(cm^3) & (1.0E-3 Pa.s)->(1.0E-05/3600/24 hPa.d) 
+                    K_axial[cid]=cellarea[cid-n_wall_junction]**2/(8*3.141592*height*1.0E-05/3600/24)*1.0E-12 #(micron^4/micron)->(cm^3) & (1.0E-3 Pa.s)->(1.0E-05/3600/24 hPa.d) 
             else:
                 K_xyl_spec=0.0
             list_ghostwalls=[] #"Fake walls" not to be displayed
             list_ghostjunctions=[] #"Fake junctions" not to be displayed
             nGhostJunction2Wall=0
             #Adding matrix components at cell-cell, cell-wall, and wall-junction connections
-            for node, edges in G.adjacency_iter() : #adjacency_iter returns an iterator of (node, adjacency dict) tuples for all nodes. This is the fastest way to look at every edge. For directed graphs, only outgoing adjacencies are included.
+            for node, edges in G.adjacency() : #adjacency_iter returns an iterator of (node, adjacency dict) tuples for all nodes. This is the fastest way to look at every edge. For directed graphs, only outgoing adjacencies are included.
                 i=indice[node] #Node ID number
                 #Here we count surrounding cell types in order to position apoplastic barriers
                 count_endo=0 #total number of endodermis cells around the wall
@@ -1376,28 +1286,28 @@ def mecha(directory='./MECHA/',     #Project
                 count_cortex=0 #total number of cortical cells around the wall
                 count_passage=0 #total number of passage cells around the wall
                 count_interC=0 #total number of intercellular spaces around the wall
-                if i<Nwalls: #wall ID
+                if i<n_walls: #wall ID
                     for neighboor, eattr in edges.items(): #Loop on connections (edges)
                         if eattr['path'] == 'membrane': #Wall connection
-                            if any(passage_cell_ID==array((indice[neighboor])-NwallsJun)):
+                            if any(passage_cell_ID==array((indice[neighboor])-n_wall_junction)):
                                 count_passage+=1
-                            if any(InterCid==array((indice[neighboor])-NwallsJun)):
+                            if any(geometry.intercellular_ids==array((indice[neighboor])-n_wall_junction)):
                                 count_interC+=1
                                 if count_interC==2 and i not in list_ghostwalls:
                                     list_ghostwalls.append(i)
-                            if G.node[neighboor]['cgroup']==3:#Endodermis
+                            if G.nodes[neighboor]['cgroup']==3:#Endodermis
                                 count_endo+=1
-                            elif G.node[neighboor]['cgroup']==13 or G.node[neighboor]['cgroup']==19 or G.node[neighboor]['cgroup']==20:#Xylem cell or vessel
+                            elif G.nodes[neighboor]['cgroup']==13 or G.nodes[neighboor]['cgroup']==19 or G.nodes[neighboor]['cgroup']==20:#Xylem cell or vessel
                                 count_xyl+=1
-                                if (count_xyl==2 and Xylem_pieces) and i not in list_ghostwalls:
+                                if (count_xyl==2 and geometry.xylem_pieces) and i not in list_ghostwalls:
                                     list_ghostwalls.append(i)
-                            elif G.node[neighboor]['cgroup']>4:#Pericycle or stele but not xylem
+                            elif G.nodes[neighboor]['cgroup']>4:#Pericycle or stele but not xylem
                                 count_stele_overall+=1
-                            elif G.node[neighboor]['cgroup']==4:#Cortex
+                            elif G.nodes[neighboor]['cgroup']==4:#Cortex
                                 count_cortex+=1
-                            elif G.node[neighboor]['cgroup']==1:#Exodermis
+                            elif G.nodes[neighboor]['cgroup']==1:#Exodermis
                                 count_exo+=1
-                            elif G.node[neighboor]['cgroup']==2:#Epidermis
+                            elif G.nodes[neighboor]['cgroup']==2:#Epidermis
                                 count_epi+=1
                 
                 for neighboor, eattr in edges.items(): #Loop on connections (edges)
@@ -1405,57 +1315,57 @@ def mecha(directory='./MECHA/',     #Project
                     if j > i: #Only treating the information one way to save time
                         path = eattr['path'] #eattr is the edge attribute (i.e. connection type)
                         if path == 'wall': #Wall connection
-                            #K = eattr['kw']*1.0E-04*((eattr['lat_dist']+height)*eattr['thickness']-square(eattr['thickness']))/eattr['length'] #Junction-Wall conductance (cm^3/hPa/d)
-                            temp=1.0E-04*((eattr['lat_dist']+height)*thickness-square(thickness))/eattr['length'] #Wall section to length ratio (cm)
-                            if (count_interC>=2 and Barrier>0) or (count_xyl==2 and Xylem_pieces): #"Fake wall" splitting an intercellular space or a xylem cell in two
+                            #K = eattr['kw']*1.0E-04*((eattr['lat_dist']+height)*eattr['geometry.thickness']-square(eattr['geometry.thickness']))/eattr['length'] #Junction-Wall conductance (cm^3/hPa/d)
+                            temp=1.0E-04*((eattr['lat_dist']+height)*geometry.thickness-square(geometry.thickness))/eattr['length'] #Wall section to length ratio (cm)
+                            if (count_interC>=2 and Barrier>0) or (count_xyl==2 and geometry.xylem_pieces): #"Fake wall" splitting an intercellular space or a xylem cell in two
                                 K = 1.0E-16 #Non conductive
                                 if j not in list_ghostjunctions:
                                     fakeJ=True
-                                    for ind in range(int(nJunction2Wall[j-Nwalls])):
-                                        if Junction2Wall[j-Nwalls][ind] not in list_ghostwalls:
+                                    for ind in range(int(nJunction2Wall[j-n_walls])):
+                                        if Junction2Wall[j-n_walls][ind] not in list_ghostwalls:
                                             fakeJ=False #If any of the surrounding walls is real, the junction is real
                                     if fakeJ:
                                         list_ghostjunctions.append(j)
-                                        nGhostJunction2Wall+=int(nJunction2Wall[j-Nwalls])+2 #The first and second thick junction nodes each appear twice in the text file for Paraview
+                                        nGhostJunction2Wall+=int(nJunction2Wall[j-n_walls])+2 #The first and second thick junction nodes each appear twice in the text file for general.paraview
                             elif count_cortex>=2: #wall between two cortical cells
                                 K = kw_cortex_cortex*temp #Junction-Wall conductance (cm^3/hPa/d)
                             elif count_endo>=2: #wall between two endodermis cells
-                                K = kw_endo_endo*temp #Junction-Wall conductance (cm^3/hPa/d)  #(height*eattr['thickness'])/eattr['length']#
+                                K = kw_endo_endo*temp #Junction-Wall conductance (cm^3/hPa/d)  #(height*eattr['geometry.thickness'])/eattr['length']#
                             elif count_stele_overall>0 and count_endo>0: #wall between endodermis and pericycle
                                 if count_passage>0:
-                                    K = kw_passage*temp #(height*eattr['thickness'])/eattr['length']#
+                                    K = kw_passage*temp #(height*eattr['geometry.thickness'])/eattr['length']#
                                 else:
-                                    K = kw_endo_peri*temp #Junction-Wall conductance (cm^3/hPa/d) #(height*eattr['thickness'])/eattr['length']#
+                                    K = kw_endo_peri*temp #Junction-Wall conductance (cm^3/hPa/d) #(height*eattr['geometry.thickness'])/eattr['length']#
                             elif count_stele_overall==0 and count_endo==1: #wall between endodermis and cortex
                                 if count_passage>0:
-                                    K = kw_passage*temp  #(height*eattr['thickness'])/eattr['length']#
+                                    K = kw_passage*temp  #(height*eattr['geometry.thickness'])/eattr['length']#
                                 else:
-                                    K = kw_endo_cortex*temp #Junction-Wall conductance (cm^3/hPa/d)  #(height*eattr['thickness'])/eattr['length']#
+                                    K = kw_endo_cortex*temp #Junction-Wall conductance (cm^3/hPa/d)  #(height*eattr['geometry.thickness'])/eattr['length']#
                             elif count_exo>=2: #wall between two exodermis cells
-                                K = kw_exo_exo*temp #Junction-Wall conductance (cm^3/hPa/d)  #(height*eattr['thickness'])/eattr['length']#
+                                K = kw_exo_exo*temp #Junction-Wall conductance (cm^3/hPa/d)  #(height*eattr['geometry.thickness'])/eattr['length']#
                             else: #other walls
-                                K = kw*temp #Junction-Wall conductance (cm^3/hPa/d)  #(height*eattr['thickness'])/eattr['length']#
+                                K = kw*temp #Junction-Wall conductance (cm^3/hPa/d)  #(height*eattr['geometry.thickness'])/eattr['length']#
                             ########Solute fluxes (diffusion across walls and junctions)
-                            if Apo_Contagion==2:
+                            if general.apo_contagion==2:
                                 temp_factor=1.0 #Factor for reduced diffusion across impermeable walls
-                                if (count_interC>=2 and Barrier>0) or (count_xyl==2 and Xylem_pieces): #"fake wall" splitting an intercellular space or a xylem cell in two
+                                if (count_interC>=2 and Barrier>0) or (count_xyl==2 and geometry.xylem_pieces): #"fake wall" splitting an intercellular space or a xylem cell in two
                                     temp_factor=1.0E-16 #Correction
                                 elif count_endo>=2:
                                     temp_factor=kw_endo_endo/kw
                                 elif count_stele_overall>0 and count_endo>0: #wall between endodermis and pericycle
                                     if count_passage>0:
-                                        temp_factor=kw_passage/kw #(height*eattr['thickness'])/eattr['length']#
+                                        temp_factor=kw_passage/kw #(height*eattr['geometry.thickness'])/eattr['length']#
                                     else:
-                                        temp_factor=kw_endo_peri/kw #Junction-Wall conductance (cm^3/hPa/d) #(height*eattr['thickness'])/eattr['length']#
+                                        temp_factor=kw_endo_peri/kw #Junction-Wall conductance (cm^3/hPa/d) #(height*eattr['geometry.thickness'])/eattr['length']#
                                 elif count_stele_overall==0 and count_endo==1: #wall between endodermis and cortex
                                     if count_passage>0:
-                                        temp_factor=kw_passage/kw  #(height*eattr['thickness'])/eattr['length']#
+                                        temp_factor=kw_passage/kw  #(height*eattr['geometry.thickness'])/eattr['length']#
                                     else:
-                                        temp_factor=kw_endo_cortex/kw #Junction-Wall conductance (cm^3/hPa/d)  #(height*eattr['thickness'])/eattr['length']#
+                                        temp_factor=kw_endo_cortex/kw #Junction-Wall conductance (cm^3/hPa/d)  #(height*eattr['geometry.thickness'])/eattr['length']#
                                 elif count_exo>=2: #wall between two exodermis cells
-                                    temp_factor=kw_exo_exo/kw #Junction-Wall conductance (cm^3/hPa/d)  #(height*eattr['thickness'])/eattr['length']#
-                                DF=temp*temp_factor*Diff_PW1 #"Diffusive flux" (cm^3/d) temp is the section to length ratio of the wall to junction path
-                                if Sym_Contagion==2: #Sym & Apo contagion
+                                    temp_factor=kw_exo_exo/kw #Junction-Wall conductance (cm^3/hPa/d)  #(height*eattr['geometry.thickness'])/eattr['length']#
+                                DF=temp*temp_factor*hormones.diff1_pw1 #"Diffusive flux" (cm^3/d) temp is the section to length ratio of the wall to junction path
+                                if general.sym_contagion==2: #Sym & Apo contagion
                                     if i not in Apo_w_Zombies0:
                                         matrix_C[i][i] -= DF
                                         matrix_C[i][j] += DF #Convection will be dealt with further down
@@ -1471,51 +1381,51 @@ def mecha(directory='./MECHA/',     #Project
                                         matrix_ApoC[j][i] += DF
                         elif path == "membrane": #Membrane connection
                             #K = (eattr['kmb']+eattr['kaqp'])*1.0E-08*(height+eattr['dist'])*eattr['length']
-                            if Apo_Contagion==2 and Sym_Contagion==2:
-                                for carrier in Active_transport_range:
-                                    if int(carrier.get("tissue"))==G.node[j]['cgroup']:
+                            if general.apo_contagion==2 and general.sym_contagion==2:
+                                for carrier in hormones.carrier_elems:
+                                    if int(carrier.get("tissue"))==G.nodes[j]['cgroup']:
                                         #Condition is that the protoplast (j) is an actual protoplast with membranes
-                                        if j-NwallsJun not in InterCid and not (Barrier>0 and (G.node[j]['cgroup']==13 or G.node[j]['cgroup']==19 or G.node[j]['cgroup']==20)):
+                                        if j-n_wall_junction not in geometry.intercellular_ids and not (Barrier>0 and (G.nodes[j]['cgroup']==13 or G.nodes[j]['cgroup']==19 or G.nodes[j]['cgroup']==20)):
                                             temp=float(carrier.get("constant"))*(height+eattr['dist'])*eattr['length'] #Linear transport constant (Vmax/KM) [liter/day^-1/micron^-2] * membrane surface [micron²]
                                             if int(carrier.get("direction"))==1: #Influx transporter
-                                                if j-NwallsJun not in Sym_Zombie0: #Concentration not affected if set as boundary condition
+                                                if j-n_wall_junction not in hormones.sym_zombie0: #Concentration not affected if set as boundary condition
                                                     matrix_C[j][i] += temp #Increase of concentration in protoplast (j) depends on concentration in cell wall (i)
                                                 if i not in Apo_w_Zombies0: #Concentration not affected if set as boundary condition
                                                     matrix_C[i][i] -= temp #Decrease of concentration in apoplast (i) depends on concentration in apoplast (i)
                                             elif int(carrier.get("direction"))==int(-1): #Efflux transporter
-                                                if j-NwallsJun not in Sym_Zombie0: #Concentration not affected if set as boundary condition
+                                                if j-n_wall_junction not in hormones.sym_zombie0: #Concentration not affected if set as boundary condition
                                                     matrix_C[j][j] -= temp #Increase of concentration in protoplast (j) depends on concentration in protoplast (j)
                                                 if i not in Apo_w_Zombies0: #Concentration not affected if set as boundary condition
                                                     matrix_C[i][j] += temp #Decrease of concentration in apoplast (i) depends on concentration in protoplast (j)
                                             else:
                                                 error('Error, carrier direction is either 1 (influx) or -1 (efflux), please correct in *_Hormones_Carriers_*.xml')
-                            if G.node[j]['cgroup']==1: #Exodermis
+                            if G.nodes[j]['cgroup']==1: #Exodermis
                                 kaqp=kaqp_exo
-                            elif G.node[j]['cgroup']==2: #Epidermis
+                            elif G.nodes[j]['cgroup']==2: #Epidermis
                                 kaqp=kaqp_epi
-                            elif G.node[j]['cgroup']==3: #Endodermis
+                            elif G.nodes[j]['cgroup']==3: #Endodermis
                                 kaqp=kaqp_endo
-                            elif G.node[j]['cgroup']==13 or G.node[j]['cgroup']==19 or G.node[j]['cgroup']==20: #xylem cell or vessel
+                            elif G.nodes[j]['cgroup']==13 or G.nodes[j]['cgroup']==19 or G.nodes[j]['cgroup']==20: #xylem cell or vessel
                                 if Barrier>0: #Xylem vessel
                                     kaqp=kaqp_stele*10000 #No membrane resistance because no membrane
-                                    if Apo_Contagion==2 and Sym_Contagion==2:
+                                    if general.apo_contagion==2 and general.sym_contagion==2:
                                         #Diffusion between mature xylem vessels and their walls
-                                        temp=1.0E-04*(lengths[i]*height)/thickness #Section to length ratio (cm) for the xylem wall
+                                        temp=1.0E-04*(lengths[i]*height)/geometry.thickness #Section to length ratio (cm) for the xylem wall
                                         if i not in Apo_w_Zombies0:
-                                            matrix_C[i][i] -= temp*Diff_PW1
-                                            matrix_C[i][j] += temp*Diff_PW1
-                                        if j-NwallsJun not in Sym_Zombie0: #Mature xylem vessels are referred to as cells, so they are on the Sym side even though they are part of the apoplast
-                                            matrix_C[j][j] -= temp*Diff_PW1
-                                            matrix_C[j][i] += temp*Diff_PW1
+                                            matrix_C[i][i] -= temp*hormones.diff1_pw1
+                                            matrix_C[i][j] += temp*hormones.diff1_pw1
+                                        if j-n_wall_junction not in hormones.sym_zombie0: #Mature xylem vessels are referred to as cells, so they are on the Sym side even though they are part of the apoplast
+                                            matrix_C[j][j] -= temp*hormones.diff1_pw1
+                                            matrix_C[j][i] += temp*hormones.diff1_pw1
                                 else:
                                     kaqp=kaqp_stele
-                            elif G.node[j]['cgroup']>4: #Stele and pericycle but not xylem
+                            elif G.nodes[j]['cgroup']>4: #Stele and pericycle but not xylem
                                 kaqp=kaqp_stele
-                            elif (j-NwallsJun in InterCid) and Barrier>0: #the neighbour is an intercellular space "cell". Between j and i connected by a membrane, only j can be cell because j>i
-                                kaqp=kInterC
+                            elif (j-n_wall_junction in geometry.intercellular_ids) and Barrier>0: #the neighbour is an intercellular space "cell". Between j and i connected by a membrane, only j can be cell because j>i
+                                kaqp=geometry.k_interc
                                 #No carrier
-                            elif G.node[j]['cgroup']==4: #Cortex
-                                kaqp=float(a_cortex*dist_grav[i]*1.0E-04+b_cortex) #AQP activity (cm/hPa/d)
+                            elif G.nodes[j]['cgroup']==4: #Cortex
+                                kaqp=float(a_cortex*dist_grav[i][0]*1.0E-04+b_cortex) #AQP activity (cm/hPa/d)
                                 if kaqp < 0:
                                     error('Error, negative kaqp in cortical cell, adjust Paqp_cortex')
                             #Calculating each conductance
@@ -1523,43 +1433,43 @@ def mecha(directory='./MECHA/',     #Project
                                 if kw_endo_endo==0.00:
                                     K=0.00
                                 else:
-                                    K = 1/(1/(kw_endo_endo/(thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
+                                    K = 1/(1/(kw_endo_endo/(geometry.thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
                             elif count_exo>=2: #wall between two exodermis cells, in this case the suberized wall can limit the transfer of water between cell and wall
                                 if kw_exo_exo==0.00:
                                     K=0.00
                                 else:
-                                    K = 1/(1/(kw_exo_exo/(thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
+                                    K = 1/(1/(kw_exo_exo/(geometry.thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
                             elif count_stele_overall>0 and count_endo>0: #wall between endodermis and pericycle, in this case the suberized wall can limit the transfer of water between cell and wall
                                 if count_passage>0:
-                                    K = 1/(1/(kw_passage/(thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
+                                    K = 1/(1/(kw_passage/(geometry.thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
                                 else:
                                     if kw_endo_peri==0.00:
                                         K=0.00
                                     else:
-                                        K = 1/(1/(kw_endo_peri/(thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
+                                        K = 1/(1/(kw_endo_peri/(geometry.thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
                             elif count_stele_overall==0 and count_endo==1: #wall between cortex and endodermis, in this case the suberized wall can limit the transfer of water between cell and wall
                                 if kaqp==0.0:
                                     K=1.00E-16
                                 else:
                                     if count_passage>0:
-                                        K = 1/(1/(kw_passage/(thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
+                                        K = 1/(1/(kw_passage/(geometry.thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
                                     else:
                                         if kw_endo_cortex==0.00:
                                             K=0.00
                                         else:
-                                            K = 1/(1/(kw_endo_cortex/(thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
+                                            K = 1/(1/(kw_endo_cortex/(geometry.thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
                             else:
                                 if kaqp==0.0:
                                     K=1.00E-16
                                 else:
-                                    K = 1/(1/(kw/(thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
+                                    K = 1/(1/(kw/(geometry.thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
                             Kmb[jmb]=K
                             #if jmb<=10:
-                            #    print(jmb,'K init',K,'wid',i,'cid',j-NwallsJun)
+                            #    print(jmb,'K init',K,'wid',i,'cid',j-n_wall_junction)
                             jmb+=1
                         elif path == "plasmodesmata": #Plasmodesmata connection
-                            cgroupi=G.node[i]['cgroup']
-                            cgroupj=G.node[j]['cgroup']
+                            cgroupi=G.nodes[i]['cgroup']
+                            cgroupj=G.nodes[j]['cgroup']
                             if cgroupi==19 or cgroupi==20:  #Xylem in new Cellset version
                                 cgroupi=13
                             elif cgroupi==21: #Xylem Pole Pericyle in new Cellset version
@@ -1577,7 +1487,7 @@ def mecha(directory='./MECHA/',     #Project
                             elif cgroupj==26: #Companion Cell in new Cellset version
                                 cgroupj==12
                             temp_factor=1.0 #Quantity of plasmodesmata (adjusted by relative aperture)
-                            if ((j-NwallsJun in InterCid) or (i-NwallsJun in InterCid)) and Barrier>0: #one of the connected cells is an intercellular space "cell".
+                            if ((j-n_wall_junction in geometry.intercellular_ids) or (i-n_wall_junction in geometry.intercellular_ids)) and Barrier>0: #one of the connected cells is an intercellular space "cell".
                                 temp_factor=0.0
                             elif cgroupj==13 and cgroupi==13: #Fake wall splitting a xylem cell or vessel, high conductance in order to ensure homogeneous pressure within the splitted cell
                                 temp_factor=10000*Fplxheight*1.0E-04*eattr['length'] #Quantity of PD
@@ -1606,13 +1516,13 @@ def mecha(directory='./MECHA/',     #Project
                             elif (cgroupi==3 and cgroupj==3):#Endodermis to endodermis cell
                                 temp_factor=Fplxheight_endo_endo*1.0E-04*eattr['length']
                             elif (cgroupi==3 and cgroupj==16) or (cgroupj==3 and cgroupi==16):#Pericycle to endodermis cell or vice versa
-                                if (i-NwallsJun in PPP) or (j-NwallsJun in PPP):
+                                if (i-n_wall_junction in PPP) or (j-n_wall_junction in PPP):
                                     temp=float(Kplrange[iPD].get("PPP_factor")) #Correction for specific cell-type PD aperture
                                 else:
                                     temp=1
                                 temp_factor=2*temp/(temp+1)*Fplxheight_endo_peri*1.0E-04*eattr['length']
                             elif (cgroupi==16 and (cgroupj==5 or cgroupj==13)) or (cgroupj==16 and (cgroupi==5 or cgroupi==13)):#Pericycle to stele cell or vice versa
-                                if (i-NwallsJun in PPP) or (j-NwallsJun in PPP):
+                                if (i-n_wall_junction in PPP) or (j-n_wall_junction in PPP):
                                     temp=float(Kplrange[iPD].get("PPP_factor")) #Correction for specific cell-type PD aperture
                                 else:
                                     temp=1
@@ -1622,7 +1532,7 @@ def mecha(directory='./MECHA/',     #Project
                                 temp_factor=2*temp/(temp+1)*Fplxheight_stele_comp*1.0E-04*eattr['length']
                             elif (cgroupi==16 and cgroupj==12) or (cgroupi==12 and cgroupj==16):#Pericycle to companion cell
                                 temp1=float(Kplrange[iPD].get("PCC_factor"))
-                                if (i-NwallsJun in PPP) or (j-NwallsJun in PPP):
+                                if (i-n_wall_junction in PPP) or (j-n_wall_junction in PPP):
                                     temp2=float(Kplrange[iPD].get("PPP_factor")) #Correction for specific cell-type PD aperture
                                 else:
                                     temp2=1
@@ -1634,7 +1544,7 @@ def mecha(directory='./MECHA/',     #Project
                                 temp=float(Kplrange[iPD].get("PCC_factor"))
                                 temp_factor=2*temp/(temp+1)*Fplxheight_comp_sieve*1.0E-04*eattr['length']
                             elif (cgroupi==16 and cgroupj==11) or (cgroupi==11 and cgroupj==16):#Pericycle to phloem sieve tube cell
-                                if (i-NwallsJun in PPP) or (j-NwallsJun in PPP):
+                                if (i-n_wall_junction in PPP) or (j-n_wall_junction in PPP):
                                     temp=float(Kplrange[iPD].get("PPP_factor")) #Correction for specific cell-type PD aperture
                                 else:
                                     temp=1
@@ -1649,22 +1559,22 @@ def mecha(directory='./MECHA/',     #Project
                                 temp_factor=Fplxheight*1.0E-04*eattr['length'] #eattr['kpl']
                             K = Kpl*temp_factor
                             ########Solute fluxes (diffusion across plasmodesmata)
-                            if Sym_Contagion==2:
-                                DF=PD_section*temp_factor/thickness*1.0E-04*Diff_PD1 #"Diffusive flux": Total PD cross-section area (micron^2) per unit PD length (micron) (tunred into cm) multiplied by solute diffusivity (cm^2/d) (yields cm^3/d)
-                                if Apo_Contagion==2: #Sym & Apo contagion
-                                    if i-NwallsJun not in Sym_Zombie0:
+                            if general.sym_contagion==2:
+                                DF=geometry.pd_section*temp_factor/geometry.thickness*1.0E-04*hormones.diff1_pd1 #"Diffusive flux": Total PD cross-section area (micron^2) per unit PD length (micron) (tunred into cm) multiplied by solute diffusivity (cm^2/d) (yields cm^3/d)
+                                if general.apo_contagion==2: #Sym & Apo contagion
+                                    if i-n_wall_junction not in hormones.sym_zombie0:
                                         matrix_C[i][i] -= DF
                                         matrix_C[i][j] += DF #Convection will be dealt with further down
-                                    if j-NwallsJun not in Sym_Zombie0:
+                                    if j-n_wall_junction not in hormones.sym_zombie0:
                                         matrix_C[j][j] -= DF
                                         matrix_C[j][i] += DF
                                 else: #Only Sym contagion
-                                    if i-NwallsJun not in Sym_Zombie0:
-                                        matrix_SymC[i-NwallsJun][i-NwallsJun] -= DF
-                                        matrix_SymC[i-NwallsJun][j-NwallsJun] += DF
-                                    if j-NwallsJun not in Sym_Zombie0:
-                                        matrix_SymC[j-NwallsJun][j-NwallsJun] -= DF #Convection will be dealt with further down
-                                        matrix_SymC[j-NwallsJun][i-NwallsJun] += DF
+                                    if i-n_wall_junction not in hormones.sym_zombie0:
+                                        matrix_SymC[i-n_wall_junction][i-n_wall_junction] -= DF
+                                        matrix_SymC[i-n_wall_junction][j-n_wall_junction] += DF
+                                    if j-n_wall_junction not in hormones.sym_zombie0:
+                                        matrix_SymC[j-n_wall_junction][j-n_wall_junction] -= DF #Convection will be dealt with further down
+                                        matrix_SymC[j-n_wall_junction][i-n_wall_junction] += DF
                         matrix_W[i][i] -= K #Filling the Doussan matrix (symmetric)
                         matrix_W[i][j] += K
                         matrix_W[j][i] += K
@@ -1678,8 +1588,8 @@ def mecha(directory='./MECHA/',     #Project
             
             #Adding matrix components at soil-wall connections
             for wid in Borderwall:
-                if (position[wid][0]>=Xcontact) or (Wall2Cell[wid][0]-NwallsJun in Contact): #Wall (not including junctions) connected to soil
-                    temp=1.0E-04*(lengths[wid]/2*height)/(thickness/2)
+                if (position[wid][0]>=Xcontact) or (Wall2Cell[wid][0]-n_wall_junction in hormones.contact): #Wall (not including junctions) connected to soil
+                    temp=1.0E-04*(lengths[wid]/2*height)/(geometry.thickness/2)
                     K=kw*temp #Half the wall length is used here as the other half is attributed to the junction (Only for connection to soil)
                     matrix_W[wid][wid] -= K #Doussan matrix
                     rhs_s[wid][0] = -K    #Right-hand side vector, could become Psi_soil[idwall], which could be a function of the horizontal position
@@ -1690,8 +1600,8 @@ def mecha(directory='./MECHA/',     #Project
                         
             #Adding matrix components at soil-junction connections
             for jid in Borderjunction:
-                if (position[jid][0]>=Xcontact) or (Junction2Wall2Cell[jid-Nwalls][0]-NwallsJun in Contact) or (Junction2Wall2Cell[jid-Nwalls][1]-NwallsJun in Contact) or (Junction2Wall2Cell[jid-Nwalls][2]-NwallsJun in Contact): #Junction connected to soil
-                    temp=1.0E-04*(lengths[jid]*height)/(thickness/2)
+                if (position[jid][0]>=Xcontact) or (Junction2Wall2Cell[jid-n_walls][0]-n_wall_junction in hormones.contact) or (Junction2Wall2Cell[jid-n_walls][1]-n_wall_junction in hormones.contact) or (Junction2Wall2Cell[jid-n_walls][2]-n_wall_junction in hormones.contact): #Junction connected to soil
+                    temp=1.0E-04*(lengths[jid]*height)/(geometry.thickness/2)
                     K=kw*temp
                     matrix_W[jid][jid] -= K #Doussan matrix
                     rhs_s[jid][0] = -K    #Right-hand side vector, could become Psi_soil[idwall], which could be a function of the horizontal position
@@ -1706,7 +1616,7 @@ def mecha(directory='./MECHA/',     #Project
                         rhs_x[cid][0] = -K_xyl  #Axial conductance of xylem vessels
                         matrix_W[cid][cid] -= K_xyl
                         #if C_flag:
-                        #    temp=10E-04*((cellperimeter[cid-NwallsJun]/2)**2)/pi/height #Cell approximative cross-section area (cm^2) per length (cm)
+                        #    temp=10E-04*((cellperimeter[cid-n_wall_junction]/2)**2)/pi/height #Cell approximative cross-section area (cm^2) per length (cm)
                         #    matrix_C[cid][cid] -= temp*Diff1*100 #Diffusion BC in xylem open vessels assumed 100 times easier than in walls
                         #    rhs_C[cid][0] -= temp*Diff1*100
                     rhs = rhs_s*Psi_soil[0][count] + rhs_x*Psi_xyl[iMaturity][count] #multiplication of rhs components delayed till this point so that rhs_s & rhs_x can be re-used to calculate Q
@@ -1716,7 +1626,7 @@ def mecha(directory='./MECHA/',     #Project
                         rhs_x[cid][0] = Flow_xyl[i][count]
                         i+=1
                     #    if C_flag:
-                    #        temp=10E-04*((cellperimeter[cid-NwallsJun]/2)**2)/pi/height #Cell approximative cross-section area (cm^2) per length (cm)
+                    #        temp=10E-04*((cellperimeter[cid-n_wall_junction]/2)**2)/pi/height #Cell approximative cross-section area (cm^2) per length (cm)
                     #        matrix_C[cid][cid] -= temp*Diff1*100 #Diffusion BC in xylem open vessels assumed 100 times easier than in walls
                     #        rhs_C[cid][0] -= temp*Diff1*100
                     rhs = rhs_s*Psi_soil[0][count] + rhs_x #multiplication of rhs components delayed till this point so that rhs_s & rhs_x can be re-used to calculate Q
@@ -1770,32 +1680,32 @@ def mecha(directory='./MECHA/',     #Project
             if Barrier>0:
                 if not isnan(Psi_xyl[iMaturity][count]):
                     for cid in listxyl:
-                        Q=rhs_x[cid]*(soln[cid]-Psi_xyl[iMaturity][count])
+                        Q=rhs_x[cid][0]*(soln[cid][0]-Psi_xyl[iMaturity][count])
                         Q_xyl.append(Q) #(cm^3/d) Negative for water flowing into xylem tubes
-                        rank=int(Cell_rank[cid-NwallsJun])
-                        row=int(rank2row[rank])
+                        rank=int(Cell_rank[cid-n_wall_junction][0])
+                        row=int(rank2row[rank][0])
                         Q_xyl_layer[row][iMaturity][count] += Q
                 elif not isnan(Flow_xyl[0][count]):
                     for cid in listxyl:
-                        Q=-rhs_x[cid]
+                        Q=-rhs_x[cid][0]
                         Q_xyl.append(Q) #(cm^3/d) Negative for water flowing into xylem tubes
-                        rank=int(Cell_rank[cid-NwallsJun])
-                        row=int(rank2row[rank])
+                        rank=int(Cell_rank[cid-n_wall_junction][0])
+                        row=int(rank2row[rank][0])
                         Q_xyl_layer[row][iMaturity][count] += Q
             elif Barrier==0:
                 if not isnan(Psi_sieve[iMaturity][count]):
                     for cid in listprotosieve:
-                        Q=rhs_p[cid]*(soln[cid]-Psi_sieve[iMaturity][count])
+                        Q=rhs_p[cid]*(soln[cid][0]-Psi_sieve[iMaturity][count])
                         Q_sieve.append(Q) #(cm^3/d) Negative for water flowing into phloem tubes
-                        rank=int(Cell_rank[cid-NwallsJun])
-                        row=int(rank2row[rank])
+                        rank=int(Cell_rank[cid-n_wall_junction][0])
+                        row=int(rank2row[rank][0])
                         Q_sieve_layer[row][iMaturity][count] += Q
                 elif not isnan(Flow_sieve[0][count]):
                     for cid in listprotosieve:
                         Q=-rhs_p[cid]
                         Q_sieve.append(Q) #(cm^3/d) Negative for water flowing into xylem tubes
-                        rank=int(Cell_rank[cid-NwallsJun])
-                        row=int(rank2row[rank])
+                        rank=int(Cell_rank[cid-n_wall_junction][0])
+                        row=int(rank2row[rank][0])
                         Q_sieve_layer[row][iMaturity][count] += Q
                 
             Q_tot[iMaturity][0]=sum(Q_soil) #Total flow rate at root surface
@@ -1816,18 +1726,18 @@ def mecha(directory='./MECHA/',     #Project
             if Barrier>0 and isnan(Psi_xyl[iMaturity][0]):
                 Psi_xyl[iMaturity][0]=0.0
                 for cid in listxyl:
-                    Psi_xyl[iMaturity][0]+=soln[cid]/Nxyl #Average of xylem water pressures
+                    Psi_xyl[iMaturity][0]+=soln[cid][0]/Nxyl #Average of xylem water pressures
             elif Barrier==0 and isnan(Psi_sieve[iMaturity][0]):
                 Psi_sieve[iMaturity][0]=0.0
                 for cid in listprotosieve:
-                    Psi_sieve[iMaturity][0]+=soln[cid]/Nprotosieve #Average of protophloem water pressures
+                    Psi_sieve[iMaturity][0]+=soln[cid][0]/Nprotosieve #Average of protophloem water pressures
             
             #Calculation of standard transmembrane fractions
             jmb=0 #Index for membrane conductance vector
-            for node, edges in G.adjacency_iter() : #adjacency_iter returns an iterator of (node, adjacency dict) tuples for all nodes. This is the fastest way to look at every edge. For directed graphs, only outgoing adjacencies are included.
+            for node, edges in G.adjacency() : #adjacency_iter returns an iterator of (node, adjacency dict) tuples for all nodes. This is the fastest way to look at every edge. For directed graphs, only outgoing adjacencies are included.
                 i = indice[node] #Node ID number
-                if i<Nwalls: #wall ID
-                    psi = soln[i]    #Node water potential
+                if i<n_walls: #wall ID
+                    psi = soln[i][0]    #Node water potential
                     #print('i',i,'psi',psi)
                     psi_o_cell = inf #Opposite cell water potential
                     #Here we count surrounding cell types in order to identify in which row of the endodermis or exodermis we are.
@@ -1840,59 +1750,60 @@ def mecha(directory='./MECHA/',     #Project
                     count_passage=0 #total number of passage cells around the wall
                     for neighboor, eattr in edges.items(): #Loop on connections (edges)
                         if eattr['path'] == 'membrane': #Wall connection
-                            if any(passage_cell_ID==array((indice[neighboor])-NwallsJun)):
+                            if any(passage_cell_ID==array((indice[neighboor])-n_wall_junction)):
                                 count_passage+=1
-                            if G.node[neighboor]['cgroup']==3:#Endodermis
+                            if G.nodes[neighboor]['cgroup']==3:#Endodermis
                                 count_endo+=1
-                            elif G.node[neighboor]['cgroup']>4:#Pericycle or stele
+                            elif G.nodes[neighboor]['cgroup']>4:#Pericycle or stele
                                 count_stele_overall+=1
-                            elif G.node[neighboor]['cgroup']==1:#Exodermis
+                            elif G.nodes[neighboor]['cgroup']==1:#Exodermis
                                 count_exo+=1
-                            elif G.node[neighboor]['cgroup']==2:#Epidermis
+                            elif G.nodes[neighboor]['cgroup']==2:#Epidermis
                                 count_epi+=1
-                            elif G.node[neighboor]['cgroup']==4:#Cortex
+                            elif G.nodes[neighboor]['cgroup']==4:#Cortex
                                 count_cortex+=1
-                        # if G.node[neighboor]['cgroup']==5:#Stele
+                        # if G.nodes[neighboor]['cgroup']==5:#Stele
                         #     count_stele+=1
                     for neighboor, eattr in edges.items(): #Loop on connections (edges)
                         j = indice[neighboor] #Neighbouring node ID number
                         path = eattr['path'] #eattr is the edge attribute (i.e. connection type)
                         if path == "membrane": #Membrane connection
-                            psin = soln[j] #Neighbouring node water potential
+                            psin = soln[j][0] #Neighbouring node water potential
                             #print('j',j,'psin',psin)
-                            K=Kmb[jmb]
+                            K=Kmb[jmb][0]
                             #if jmb<=10:
-                            #    print(jmb,'K STF',K,'wid',i,'cid',j-NwallsJun)
+                            #    print(jmb,'K STF',K,'wid',i,'cid',j-n_wall_junction)
                             jmb+=1
                             #Flow densities calculation
                             #Macroscopic distributed parameter for transmembrane flow
                             #Discretization based on cell layers and apoplasmic barriers
-                            rank = int(Cell_rank[j-NwallsJun])
-                            row = int(rank2row[rank])
+                            rank = int(Cell_rank[j-n_wall_junction][0])
+                            row = int(rank2row[rank][0])
                             if rank == 1 and count_epi > 0: #Outer exodermis
                                 row += 1
                             if rank == 3 and count_cortex > 0: #Outer endodermis
-                                if any(passage_cell_ID==array(j-NwallsJun)) and Barrier==2:
+                                if any(passage_cell_ID==array(j-n_wall_junction)) and Barrier==2:
                                     row += 2
                                 else:
                                     row += 3
                             elif rank == 3 and count_stele_overall > 0: #Inner endodermis
-                                if any(passage_cell_ID==array(j-NwallsJun)) and Barrier==2:
+                                if any(passage_cell_ID==array(j-n_wall_junction)) and Barrier==2:
                                     row += 1
+                                    
                             Flow = K * (psi - psin) #Note that this is only valid because we are in the scenario 0 with no osmotic potentials
                             #print('Flow',Flow,'dP',soln[node] - soln[neighboor],'Pi',soln[node],'Pj',soln[neighboor])
-                            if ((j-NwallsJun not in InterCid) and (j not in listxyl)) or Barrier==0: #Not part of STF if crosses an intercellular space "membrane" or mature xylem "membrane" (that is no membrane though still labelled like one)
+                            if ((j-n_wall_junction not in geometry.intercellular_ids) and (j not in listxyl)) or Barrier==0: #Not part of STF if crosses an intercellular space "membrane" or mature xylem "membrane" (that is no membrane though still labelled like one)
                                 if Flow > 0 :
                                     UptakeLayer_plus[row][iMaturity][count] += Flow #grouping membrane flow rates in cell layers
                                 else:
                                     UptakeLayer_minus[row][iMaturity][count] += Flow
                                 if Flow/Q_tot[iMaturity][0] > 0 :
                                     STFlayer_plus[row][iMaturity] += Flow/Q_tot[iMaturity][0] #Cell standard transmembrane fraction (positive)
-                                    STFcell_plus[j-NwallsJun][iMaturity] += Flow/Q_tot[iMaturity][0] #Cell standard transmembrane fraction (positive)
+                                    STFcell_plus[j-n_wall_junction][iMaturity] += Flow/Q_tot[iMaturity][0] #Cell standard transmembrane fraction (positive)
                                     #STFmb[jmb-1][iMaturity] = Flow/Q_tot[iMaturity][0]
                                 else:
                                     STFlayer_minus[row][iMaturity] += Flow/Q_tot[iMaturity][0] #Cell standard transmembrane fraction (negative)
-                                    STFcell_minus[j-NwallsJun][iMaturity] += Flow/Q_tot[iMaturity][0] #Cell standard transmembrane fraction (negative)
+                                    STFcell_minus[j-n_wall_junction][iMaturity] += Flow/Q_tot[iMaturity][0] #Cell standard transmembrane fraction (negative)
                                     #STFmb[jmb-1][iMaturity] = Flow/Q_tot[iMaturity][0]
                                 STFmb[jmb-1][iMaturity] = Flow/Q_tot[iMaturity][0]
             
@@ -1904,16 +1815,16 @@ def mecha(directory='./MECHA/',     #Project
                 rhs_p = np.zeros((G.number_of_nodes(),1)) #Initializing the right-hand side matrix of hydrostatic potentials for phloem BC
                 rhs_e = np.zeros((G.number_of_nodes(),1)) #Initializing the right-hand side matrix of cell elongation
                 rhs_o = np.zeros((G.number_of_nodes(),1)) #Initializing the right-hand side matrix of osmotic potentials
-                Os_cells = np.zeros((Ncells,1)) #Initializing the cell osmotic potential vector
-                Os_walls = np.zeros((Nwalls,1)) #Initializing the wall osmotic potential vector
+                Os_cells = np.zeros((n_cells,1)) #Initializing the cell osmotic potential vector
+                Os_walls = np.zeros((n_walls,1)) #Initializing the wall osmotic potential vector
                 s_membranes = np.zeros((Nmb,1)) #Initializing the membrane reflection coefficient vector
                 Os_membranes = np.zeros((Nmb,2)) #Initializing the osmotic potential storage side by side of membranes (0 for the wall, 1 for the protoplast)
                 #rhs_s invariable between diferent scenarios but can vary for different hydraulic properties
                 
                 #Apoplastic & symplastic convective direction matrices initialization
-                Cell_connec_flow=zeros((Ncells,14),dtype=int) #Flow direction across plasmodesmata, positive when entering the cell, negative otherwise
-                Apo_connec_flow=zeros((NwallsJun,5),dtype=int) #Flow direction across cell walls, rows correspond to apoplastic nodes, and the listed nodes in each row receive convective flow from the row node
-                nApo_connec_flow=zeros((NwallsJun,1),dtype=int)
+                Cell_connec_flow=zeros((n_cells,14),dtype=int) #Flow direction across plasmodesmata, positive when entering the cell, negative otherwise
+                Apo_connec_flow=zeros((n_wall_junction,5),dtype=int) #Flow direction across cell walls, rows correspond to apoplastic nodes, and the listed nodes in each row receive convective flow from the row node
+                nApo_connec_flow=zeros((n_wall_junction,1),dtype=int)
                 
                 print('Scenario #'+str(count))
                 
@@ -2030,7 +1941,7 @@ def mecha(directory='./MECHA/',     #Project
                 
                 if C_flag:
                     jmb=0 #Index for membrane conductance vector
-                    for node, edges in G.adjacency_iter() : #adjacency_iter returns an iterator of (node, adjacency dict) tuples for all nodes. This is the fastest way to look at every edge. For directed graphs, only outgoing adjacencies are included.
+                    for node, edges in G.adjacency() : #adjacency_iter returns an iterator of (node, adjacency dict) tuples for all nodes. This is the fastest way to look at every edge. For directed graphs, only outgoing adjacencies are included.
                         i=indice[node] #Node ID number
                         #Here we count surrounding cell types in order to identify on which side of the endodermis or exodermis we are.
                         count_endo=0 #total number of endodermis cells around the wall
@@ -2039,20 +1950,20 @@ def mecha(directory='./MECHA/',     #Project
                         count_epi=0 #total number of epidermis cells around the wall
                         count_cortex=0 #total number of cortical cells around the wall
                         count_passage=0 #total number of passage cells around the wall
-                        if i<Nwalls: #wall ID
+                        if i<n_walls: #wall ID
                             for neighboor, eattr in edges.items(): #Loop on connections (edges)
                                 if eattr['path'] == 'membrane': #Wall connection
-                                    if any(passage_cell_ID==array((indice[neighboor])-NwallsJun)):
+                                    if any(passage_cell_ID==array((indice[neighboor])-n_wall_junction)):
                                         count_passage+=1
-                                    if G.node[neighboor]['cgroup']==3:#Endodermis
+                                    if G.nodes[neighboor]['cgroup']==3:#Endodermis
                                         count_endo+=1
-                                    elif G.node[neighboor]['cgroup']>4:#Pericycle or stele
+                                    elif G.nodes[neighboor]['cgroup']>4:#Pericycle or stele
                                         count_stele_overall+=1
-                                    elif G.node[neighboor]['cgroup']==4:#Cortex
+                                    elif G.nodes[neighboor]['cgroup']==4:#Cortex
                                         count_cortex+=1
-                                    elif G.node[neighboor]['cgroup']==1:#Exodermis
+                                    elif G.nodes[neighboor]['cgroup']==1:#Exodermis
                                         count_exo+=1
-                                    elif G.node[neighboor]['cgroup']==2:#Epidermis
+                                    elif G.nodes[neighboor]['cgroup']==2:#Epidermis
                                         count_epi+=1
                         for neighboor, eattr in edges.items(): #Loop on connections (edges)
                             j = (indice[neighboor]) #neighbouring node number
@@ -2060,8 +1971,8 @@ def mecha(directory='./MECHA/',     #Project
                                 path = eattr['path'] #eattr is the edge attribute (i.e. connection type)
                                 if path == "membrane": #Membrane connection
                                     #Cell and wall osmotic potentials (cell types: 1=Exodermis;2=epidermis;3=endodermis;4=cortex;5=stele;16=pericycle)
-                                    rank=int(Cell_rank[int(j-NwallsJun)])
-                                    row=int(rank2row[rank])
+                                    rank=int(Cell_rank[int(j-n_wall_junction)])
+                                    row=int(rank2row[rank][0])
                                     if rank==1:#Exodermis
                                         Os_membranes[jmb][1]=Os_exo
                                         if count_epi==1: #wall between exodermis and epidermis
@@ -2078,7 +1989,7 @@ def mecha(directory='./MECHA/',     #Project
                                         elif count_stele_overall>0 and count_endo>0: #wall between endodermis and pericycle
                                             s_membranes[jmb]=s_endo_peri
                                     elif rank>=40 and rank<50:#Cortex
-                                        if j-NwallsJun in InterCid:
+                                        if j-n_wall_junction in geometry.intercellular_ids:
                                             Os_membranes[jmb][1]=0
                                             s_membranes[jmb]=0
                                         else:
@@ -2099,13 +2010,13 @@ def mecha(directory='./MECHA/',     #Project
                                             elif row==row_outercortex:
                                                 Os_membranes[jmb][1]=Os_c1
                                             s_membranes[jmb]=s_cortex
-                                    elif G.node[j]['cgroup']==5:#Stelar parenchyma
+                                    elif G.nodes[j]['cgroup']==5:#Stelar parenchyma
                                         Os_membranes[jmb][1]=Os_stele
                                         s_membranes[jmb]=s_stele
                                     elif rank==16:#Pericycle
                                         Os_membranes[jmb][1]=Os_peri
                                         s_membranes[jmb]=s_peri
-                                    elif G.node[j]['cgroup']==11 or G.node[j]['cgroup']==23:#Phloem sieve tube cell
+                                    elif G.nodes[j]['cgroup']==11 or G.nodes[j]['cgroup']==23:#Phloem sieve tube cell
                                         if not isnan(Os_sieve[0][count]):
                                             if Barrier>0 or j in listprotosieve:
                                                 Os_membranes[jmb][1]=float(Os_sieve[0][count])
@@ -2114,13 +2025,13 @@ def mecha(directory='./MECHA/',     #Project
                                         else:
                                             Os_membranes[jmb][1]=Os_stele
                                         s_membranes[jmb]=s_sieve
-                                    elif G.node[j]['cgroup']==12 or G.node[j]['cgroup']==26:#Companion cell
+                                    elif G.nodes[j]['cgroup']==12 or G.nodes[j]['cgroup']==26:#Companion cell
                                         if not isnan(Os_sieve[0][count]):
                                             Os_membranes[jmb][1]=Os_comp
                                         else:
                                             Os_membranes[jmb][1]=Os_stele
                                         s_membranes[jmb]=s_comp
-                                    elif G.node[j]['cgroup']==13 or G.node[j]['cgroup']==19 or G.node[j]['cgroup']==20:#Xylem cell or vessel
+                                    elif G.nodes[j]['cgroup']==13 or G.nodes[j]['cgroup']==19 or G.nodes[j]['cgroup']==20:#Xylem cell or vessel
                                         if Barrier==0:
                                             Os_membranes[jmb][1]=Os_stele
                                             s_membranes[jmb]=s_stele
@@ -2140,7 +2051,7 @@ def mecha(directory='./MECHA/',     #Project
                         sum_area=0.0
                         i=1
                         for cid in listxyl:
-                            area=cellarea[cid-NwallsJun]
+                            area=cellarea[cid-n_wall_junction]
                             Flow_xyl[i][count]=tot_flow*area
                             sum_area+=area
                             i+=1
@@ -2154,8 +2065,8 @@ def mecha(directory='./MECHA/',     #Project
                             #Estimate the radial distribution of solutes later on from "u"
                             #First estimate water radial velocity in the apoplast
                             u=zeros((2,1))
-                            u[0][0]=tot_flow/(height*1.0E-04)/(thickness*1.0E-04)/cell_per_layer[0][0] #Cortex (cm/d)
-                            u[1][0]=tot_flow/(height*1.0E-04)/(thickness*1.0E-04)/cell_per_layer[1][0] #Stele (cm/d)
+                            u[0][0]=tot_flow/(height*1.0E-04)/(geometry.thickness*1.0E-04)/geometry.cell_per_layer[0][0] #Cortex (cm/d)
+                            u[1][0]=tot_flow/(height*1.0E-04)/(geometry.thickness*1.0E-04)/geometry.cell_per_layer[1][0] #Stele (cm/d)
                     else:
                         print('Error: Cannot have both pressure and flow BC at xylem boundary')
                 elif not isnan(dPsi_xyl[iMaturity][count]):
@@ -2182,8 +2093,8 @@ def mecha(directory='./MECHA/',     #Project
                             else:
                                 tot_flow1=tot_flow1/2
                             #Then estimate water radial velocity in the apoplast
-                            u[0][0]=tot_flow1/(height*1.0E-04)/(thickness*1.0E-04)/cell_per_layer[0][0] #Cortex apoplastic water velocity (cm/d) positive inwards
-                            u[1][0]=tot_flow1/(height*1.0E-04)/(thickness*1.0E-04)/cell_per_layer[1][0] #Stele apoplastic water velocity (cm/d) positive inwards
+                            u[0][0]=tot_flow1/(height*1.0E-04)/(geometry.thickness*1.0E-04)/geometry.cell_per_layer[0][0] #Cortex apoplastic water velocity (cm/d) positive inwards
+                            u[1][0]=tot_flow1/(height*1.0E-04)/(geometry.thickness*1.0E-04)/geometry.cell_per_layer[1][0] #Stele apoplastic water velocity (cm/d) positive inwards
                             #Then estimate the radial solute distribution from an analytical solution (C(x)=C0+C0*(exp(u*x/D)-1)/(u/D*exp(u*x/D)-exp(u*L/D)+1)
                             Os_apo_cortex_eq=0.0
                             Os_apo_stele_eq=0.0
@@ -2192,9 +2103,9 @@ def mecha(directory='./MECHA/',     #Project
                             #temp1=0.0
                             #temp2=0.0
                             jmb=0 #Index for membrane vector
-                            for node, edges in G.adjacency_iter() : #adjacency_iter returns an iterator of (node, adjacency dict) tuples for all nodes. This is the fastest way to look at every edge. For directed graphs, only outgoing adjacencies are included.
+                            for node, edges in G.adjacency() : #adjacency_iter returns an iterator of (node, adjacency dict) tuples for all nodes. This is the fastest way to look at every edge. For directed graphs, only outgoing adjacencies are included.
                                 i = indice[node] #Node ID number
-                                if i<Nwalls: #wall ID
+                                if i<n_walls: #wall ID
                                     for neighboor, eattr in edges.items(): #Loop on connections (edges)
                                         if eattr['path'] == 'membrane': #Wall connection
                                             if r_rel[i]>=0: #cortical side
@@ -2211,21 +2122,21 @@ def mecha(directory='./MECHA/',     #Project
                                             jmb+=1
                             tot_flow2=kr_tot[iMaturity][0]*perimeter*height*1.0E-04*(Psi_soil[0][count]+Os_apo_cortex_eq-Os_sym_cortex_eq-Psi_xyl[iMaturity][count]-Os_apo_stele_eq+Os_sym_stele_eq)
                             print('flow_rate =',tot_flow2,' iter =',iter)
-                        u[0][0]=tot_flow2/(height*1.0E-04)/(thickness*1.0E-04)/cell_per_layer[0][0] #Cortex (cm/d)
-                        u[1][0]=tot_flow2/(height*1.0E-04)/(thickness*1.0E-04)/cell_per_layer[1][0] #Stele (cm/d)
+                        u[0][0]=tot_flow2/(height*1.0E-04)/(geometry.thickness*1.0E-04)/geometry.cell_per_layer[0][0] #Cortex (cm/d)
+                        u[1][0]=tot_flow2/(height*1.0E-04)/(geometry.thickness*1.0E-04)/geometry.cell_per_layer[1][0] #Stele (cm/d)
                         ##Then estimate osmotic potentials in radial walls later on: C(x)=C0+C0*(exp(u*x/D)-1)/(u/D*exp(u*x/D)-exp(u*L/D)+1)
                 
                 #Elongation BC
                 if Barrier==0: #No elongation from the Casparian strip on
-                    for wid in range(Nwalls):
-                        rhs_e[wid][0]=lengths[wid]*thickness/2*1.0E-08*(Elong_cell[0][count]+(x_rel[wid]-0.5)*Elong_cell_side_diff[0][count])*Water_fraction_apo #cm^3/d Cell wall horizontal surface assumed to be rectangular (junctions are pointwise elements)
-                    for cid in range(Ncells):
-                        if cellarea[cid]>cellperimeter[cid]*thickness/2:
-                            rhs_e[NwallsJun+cid][0]=(cellarea[cid]-cellperimeter[cid]*thickness/2)*1.0E-8*(Elong_cell[0][count]+(x_rel[NwallsJun+cid]-0.5)*Elong_cell_side_diff[0][count])*Water_fraction_sym #cm^3/d Wall thickness removed from cell horizontal area to obtain protoplast horizontal area
+                    for wid in range(n_walls):
+                        rhs_e[wid][0]=lengths[wid]*geometry.thickness/2*1.0E-08*(Elong_cell[0][count]+(x_rel[wid]-0.5)*Elong_cell_side_diff[0][count])*Water_fraction_apo #cm^3/d Cell wall horizontal surface assumed to be rectangular (junctions are pointwise elements)
+                    for cid in range(n_cells):
+                        if cellarea[cid]>cellperimeter[cid]*geometry.thickness/2:
+                            rhs_e[n_wall_junction+cid][0]=(cellarea[cid]-cellperimeter[cid]*geometry.thickness/2)*1.0E-8*(Elong_cell[0][count]+(x_rel[n_wall_junction+cid]-0.5)*Elong_cell_side_diff[0][count])*Water_fraction_sym #cm^3/d Wall geometry.thickness removed from cell horizontal area to obtain protoplast horizontal area
                         else:
-                            rhs_e[NwallsJun+cid][0]=0 #The cell elongation virtually does not imply water influx, though its walls do (typically intercellular spaces
-                            #print('Cell too small to have '+str(thickness/2)+' micron thick walls')
-                            #print('Cell ID & rank: '+str(cid)+' '+str(Cell_rank[cid]),'Total horizontal area: '+str(cellarea[cid])+' microns^2','Wall horizontal area: '+str(cellperimeter[cid]*thickness/2)+' microns^2')
+                            rhs_e[n_wall_junction+cid][0]=0 #The cell elongation virtually does not imply water influx, though its walls do (typically intercellular spaces
+                            #print('Cell too small to have '+str(geometry.thickness/2)+' micron thick walls')
+                            #print('Cell ID & rank: '+str(cid)+' '+str(Cell_rank[cid]),'Total horizontal area: '+str(cellarea[cid])+' microns^2','Wall horizontal area: '+str(cellperimeter[cid]*geometry.thickness/2)+' microns^2')
                 
                 Psi_sieve[iMaturity][count]=float(BC_sieve_range[count].get("pressure")) #Phloem sieve element pressure potential (hPa)
                 dPsi_sieve[iMaturity][count]=float(BC_sieve_range[count].get("deltaP")) #Phloem pressure potential change as compared to equilibrium pressure (hPa)
@@ -2240,7 +2151,7 @@ def mecha(directory='./MECHA/',     #Project
                             sum_area=0
                             i=1
                             for cid in listprotosieve:
-                                area=cellarea[cid-NwallsJun]
+                                area=cellarea[cid-n_wall_junction]
                                 Flow_sieve[i][count]=tot_flow*area
                                 sum_area+=area
                                 i+=1
@@ -2253,7 +2164,7 @@ def mecha(directory='./MECHA/',     #Project
                             sum_area=0
                             i=1
                             for cid in listsieve:
-                                area=cellarea[cid-NwallsJun]
+                                area=cellarea[cid-n_wall_junction]
                                 Flow_sieve[i][count]=tot_flow*area
                                 sum_area+=area
                                 i+=1
@@ -2275,7 +2186,7 @@ def mecha(directory='./MECHA/',     #Project
                         print('Error: Cannot have both pressure and pressure change relative to equilibrium as phloem boundary condition')
                 
                 jmb=0 #Index for membrane conductance vector
-                for node, edges in G.adjacency_iter() : #adjacency_iter returns an iterator of (node, adjacency dict) tuples for all nodes. This is the fastest way to look at every edge. For directed graphs, only outgoing adjacencies are included.
+                for node, edges in G.adjacency() : #adjacency_iter returns an iterator of (node, adjacency dict) tuples for all nodes. This is the fastest way to look at every edge. For directed graphs, only outgoing adjacencies are included.
                     i=indice[node] #Node ID number
                     #Here we count surrounding cell types in order to identify on which side of the endodermis or exodermis we are.
                     count_endo=0 #total number of endodermis cells around the wall
@@ -2284,7 +2195,7 @@ def mecha(directory='./MECHA/',     #Project
                     count_epi=0 #total number of epidermis cells around the wall
                     count_cortex=0 #total number of cortical cells around the wall
                     count_passage=0 #total number of passage cells around the wall
-                    if i<Nwalls: #wall ID
+                    if i<n_walls: #wall ID
                         if Os_soil[2][count] == 2: #Central symmetrical gradient for apoplastic osmotic potential
                             if Os_soil[4][count] == 0: #Not the analytical solution
                                 Os_soil_local=float(Os_soil[0][count]+(Os_soil[1][count]-Os_soil[0][count])*abs(r_rel[i])**Os_soil[3][count])
@@ -2303,17 +2214,17 @@ def mecha(directory='./MECHA/',     #Project
                             Os_xyl_local=float((Os_xyl[0][count]+Os_xyl[1][count])/2)
                         for neighboor, eattr in edges.items(): #Loop on connections (edges)
                             if eattr['path'] == 'membrane': #Wall connection
-                                if any(passage_cell_ID==array((indice[neighboor])-NwallsJun)):
+                                if any(passage_cell_ID==array((indice[neighboor])-n_wall_junction)):
                                     count_passage+=1
-                                if G.node[neighboor]['cgroup']==3:#Endodermis
+                                if G.nodes[neighboor]['cgroup']==3:#Endodermis
                                     count_endo+=1
-                                elif G.node[neighboor]['cgroup']>4:#Pericycle or stele
+                                elif G.nodes[neighboor]['cgroup']>4:#Pericycle or stele
                                     count_stele_overall+=1
-                                elif G.node[neighboor]['cgroup']==4:#Cortex
+                                elif G.nodes[neighboor]['cgroup']==4:#Cortex
                                     count_cortex+=1
-                                elif G.node[neighboor]['cgroup']==1:#Exodermis
+                                elif G.nodes[neighboor]['cgroup']==1:#Exodermis
                                     count_exo+=1
-                                elif G.node[neighboor]['cgroup']==2:#Epidermis
+                                elif G.nodes[neighboor]['cgroup']==2:#Epidermis
                                     count_epi+=1
                     for neighboor, eattr in edges.items(): #Loop on connections (edges)
                         j = (indice[neighboor]) #neighbouring node number
@@ -2321,10 +2232,10 @@ def mecha(directory='./MECHA/',     #Project
                             path = eattr['path'] #eattr is the edge attribute (i.e. connection type)
                             if path == "membrane": #Membrane connection
                                 #Cell and wall osmotic potentials (cell types: 1=Exodermis;2=epidermis;3=endodermis;4=cortex;5=stele;16=pericycle)
-                                rank=int(Cell_rank[int(j-NwallsJun)])
-                                row=int(rank2row[rank])
+                                rank=int(Cell_rank[int(j-n_wall_junction)])
+                                row=int(rank2row[rank][0])
                                 if rank==1:#Exodermis
-                                    Os_cells[j-NwallsJun]=Os_exo
+                                    Os_cells[j-n_wall_junction]=Os_exo
                                     Os_membranes[jmb][1]=Os_exo
                                     OsCellLayer[row][iMaturity][count]+=Os_exo
                                     nOsCellLayer[row][iMaturity][count]+=1
@@ -2340,7 +2251,7 @@ def mecha(directory='./MECHA/',     #Project
                                         OsWallLayer[row][iMaturity][count]+=Os_soil_local
                                         nOsWallLayer[row][iMaturity][count]+=1
                                 elif rank==2:#Epidermis
-                                    Os_cells[j-NwallsJun]=Os_epi
+                                    Os_cells[j-n_wall_junction]=Os_epi
                                     Os_membranes[jmb][1]=Os_epi
                                     OsCellLayer[row][iMaturity][count]+=Os_epi
                                     nOsCellLayer[row][iMaturity][count]+=1
@@ -2349,7 +2260,7 @@ def mecha(directory='./MECHA/',     #Project
                                     OsWallLayer[row][iMaturity][count]+=Os_soil_local
                                     nOsWallLayer[row][iMaturity][count]+=1
                                 elif rank==3:#Endodermis
-                                    Os_cells[j-NwallsJun]=Os_endo
+                                    Os_cells[j-n_wall_junction]=Os_endo
                                     Os_membranes[jmb][1]=Os_endo
                                     OsCellLayer[row][iMaturity][count]+=Os_endo
                                     nOsCellLayer[row][iMaturity][count]+=1
@@ -2382,8 +2293,8 @@ def mecha(directory='./MECHA/',     #Project
                                             nOsWallLayer[row][iMaturity][count]+=1
                                         s_membranes[jmb]=s_endo_peri
                                 elif rank>=40 and rank<50:#Cortex
-                                    if j-NwallsJun in InterCid: 
-                                        Os_cells[j-NwallsJun]=Os_soil_local
+                                    if j-n_wall_junction in geometry.intercellular_ids: 
+                                        Os_cells[j-n_wall_junction]=Os_soil_local
                                         Os_walls[i]=Os_soil_local
                                         Os_membranes[jmb][1]=Os_soil_local
                                         Os_membranes[jmb][0]=Os_soil_local
@@ -2392,42 +2303,42 @@ def mecha(directory='./MECHA/',     #Project
                                         nOsWallLayer[row][iMaturity][count]+=1
                                     else:
                                         if row==row_outercortex-7:
-                                            Os_cells[j-NwallsJun]=Os_c8
+                                            Os_cells[j-n_wall_junction]=Os_c8
                                             Os_membranes[jmb][1]=Os_c8
                                             OsCellLayer[row][iMaturity][count]+=Os_c8
                                             nOsCellLayer[row][iMaturity][count]+=1
                                         elif row==row_outercortex-6:
-                                            Os_cells[j-NwallsJun]=Os_c7
+                                            Os_cells[j-n_wall_junction]=Os_c7
                                             Os_membranes[jmb][1]=Os_c7
                                             OsCellLayer[row][iMaturity][count]+=Os_c7
                                             nOsCellLayer[row][iMaturity][count]+=1
                                         elif row==row_outercortex-5:
-                                            Os_cells[j-NwallsJun]=Os_c6
+                                            Os_cells[j-n_wall_junction]=Os_c6
                                             Os_membranes[jmb][1]=Os_c6
                                             OsCellLayer[row][iMaturity][count]+=Os_c6
                                             nOsCellLayer[row][iMaturity][count]+=1
                                         elif row==row_outercortex-4:
-                                            Os_cells[j-NwallsJun]=Os_c5
+                                            Os_cells[j-n_wall_junction]=Os_c5
                                             Os_membranes[jmb][1]=Os_c5
                                             OsCellLayer[row][iMaturity][count]+=Os_c5
                                             nOsCellLayer[row][iMaturity][count]+=1
                                         elif row==row_outercortex-3:
-                                            Os_cells[j-NwallsJun]=Os_c4
+                                            Os_cells[j-n_wall_junction]=Os_c4
                                             Os_membranes[jmb][1]=Os_c4
                                             OsCellLayer[row][iMaturity][count]+=Os_c4
                                             nOsCellLayer[row][iMaturity][count]+=1
                                         elif row==row_outercortex-2:
-                                            Os_cells[j-NwallsJun]=Os_c3
+                                            Os_cells[j-n_wall_junction]=Os_c3
                                             Os_membranes[jmb][1]=Os_c3
                                             OsCellLayer[row][iMaturity][count]+=Os_c3
                                             nOsCellLayer[row][iMaturity][count]+=1
                                         elif row==row_outercortex-1:
-                                            Os_cells[j-NwallsJun]=Os_c2
+                                            Os_cells[j-n_wall_junction]=Os_c2
                                             Os_membranes[jmb][1]=Os_c2
                                             OsCellLayer[row][iMaturity][count]+=Os_c2
                                             nOsCellLayer[row][iMaturity][count]+=1
                                         elif row==row_outercortex:
-                                            Os_cells[j-NwallsJun]=Os_c1
+                                            Os_cells[j-n_wall_junction]=Os_c1
                                             Os_membranes[jmb][1]=Os_c1
                                             OsCellLayer[row][iMaturity][count]+=Os_c1
                                             nOsCellLayer[row][iMaturity][count]+=1
@@ -2435,8 +2346,8 @@ def mecha(directory='./MECHA/',     #Project
                                         s_membranes[jmb]=s_cortex
                                         OsWallLayer[row][iMaturity][count]+=Os_soil_local
                                         nOsWallLayer[row][iMaturity][count]+=1
-                                elif G.node[j]['cgroup']==5:#Stelar parenchyma
-                                    Os_cells[j-NwallsJun]=Os_stele
+                                elif G.nodes[j]['cgroup']==5:#Stelar parenchyma
+                                    Os_cells[j-n_wall_junction]=Os_stele
                                     Os_membranes[jmb][1]=Os_stele
                                     OsCellLayer[row][iMaturity][count]+=Os_stele
                                     nOsCellLayer[row][iMaturity][count]+=1
@@ -2450,7 +2361,7 @@ def mecha(directory='./MECHA/',     #Project
                                         nOsWallLayer[row][iMaturity][count]+=1
                                     s_membranes[jmb]=s_stele
                                 elif rank==16:#Pericycle
-                                    Os_cells[j-NwallsJun]=Os_peri
+                                    Os_cells[j-n_wall_junction]=Os_peri
                                     Os_membranes[jmb][1]=Os_peri
                                     OsCellLayer[row][iMaturity][count]+=Os_peri
                                     nOsCellLayer[row][iMaturity][count]+=1
@@ -2463,20 +2374,20 @@ def mecha(directory='./MECHA/',     #Project
                                         OsWallLayer[row][iMaturity][count]+=Os_xyl_local #float(Os_xyl[0][count])
                                         nOsWallLayer[row][iMaturity][count]+=1
                                     s_membranes[jmb]=s_peri
-                                elif G.node[j]['cgroup']==11 or G.node[j]['cgroup']==23:#Phloem sieve tube cell
+                                elif G.nodes[j]['cgroup']==11 or G.nodes[j]['cgroup']==23:#Phloem sieve tube cell
                                     if not isnan(Os_sieve[0][count]):
                                         if Barrier>0 or j in listprotosieve:
-                                            Os_cells[j-NwallsJun]=float(Os_sieve[0][count])
+                                            Os_cells[j-n_wall_junction]=float(Os_sieve[0][count])
                                             Os_membranes[jmb][1]=float(Os_sieve[0][count])
                                             OsCellLayer[row][iMaturity][count]+=float(Os_sieve[0][count])
                                             nOsCellLayer[row][iMaturity][count]+=1
                                         else:
-                                            Os_cells[j-NwallsJun]=Os_stele
+                                            Os_cells[j-n_wall_junction]=Os_stele
                                             Os_membranes[jmb][1]=Os_stele
                                             OsCellLayer[row][iMaturity][count]+=Os_stele
                                             nOsCellLayer[row][iMaturity][count]+=1
                                     else:
-                                        Os_cells[j-NwallsJun]=Os_stele
+                                        Os_cells[j-n_wall_junction]=Os_stele
                                         Os_membranes[jmb][1]=Os_stele
                                         OsCellLayer[row][iMaturity][count]+=Os_stele
                                         nOsCellLayer[row][iMaturity][count]+=1
@@ -2489,14 +2400,14 @@ def mecha(directory='./MECHA/',     #Project
                                         OsWallLayer[row][iMaturity][count]+=Os_xyl_local #float(Os_xyl[0][count])
                                         nOsWallLayer[row][iMaturity][count]+=1
                                     s_membranes[jmb]=s_sieve
-                                elif G.node[j]['cgroup']==12 or G.node[j]['cgroup']==26:#Companion cell
+                                elif G.nodes[j]['cgroup']==12 or G.nodes[j]['cgroup']==26:#Companion cell
                                     if not isnan(Os_sieve[0][count]):
-                                        Os_cells[j-NwallsJun]=Os_comp
+                                        Os_cells[j-n_wall_junction]=Os_comp
                                         Os_membranes[jmb][1]=Os_comp
                                         OsCellLayer[row][iMaturity][count]+=Os_comp
                                         nOsCellLayer[row][iMaturity][count]+=1
                                     else:
-                                        Os_cells[j-NwallsJun]=Os_stele
+                                        Os_cells[j-n_wall_junction]=Os_stele
                                         Os_membranes[jmb][1]=Os_stele
                                         OsCellLayer[row][iMaturity][count]+=Os_stele
                                         nOsCellLayer[row][iMaturity][count]+=1
@@ -2509,9 +2420,9 @@ def mecha(directory='./MECHA/',     #Project
                                         OsWallLayer[row][iMaturity][count]+=Os_xyl_local
                                         nOsWallLayer[row][iMaturity][count]+=1
                                     s_membranes[jmb]=s_comp
-                                elif G.node[j]['cgroup']==13 or G.node[j]['cgroup']==19 or G.node[j]['cgroup']==20:#Xylem cell or vessel
+                                elif G.nodes[j]['cgroup']==13 or G.nodes[j]['cgroup']==19 or G.nodes[j]['cgroup']==20:#Xylem cell or vessel
                                     if Barrier==0:
-                                        Os_cells[j-NwallsJun]=Os_stele
+                                        Os_cells[j-n_wall_junction]=Os_stele
                                         Os_membranes[jmb][1]=Os_stele
                                         OsCellLayer[row][iMaturity][count]+=Os_stele
                                         nOsCellLayer[row][iMaturity][count]+=1
@@ -2520,7 +2431,7 @@ def mecha(directory='./MECHA/',     #Project
                                         OsWallLayer[row][iMaturity][count]+=Os_soil_local
                                         nOsWallLayer[row][iMaturity][count]+=1
                                     else:
-                                        Os_cells[j-NwallsJun]=Os_xyl_local
+                                        Os_cells[j-n_wall_junction]=Os_xyl_local
                                         Os_membranes[jmb][0]=Os_xyl_local
                                         Os_membranes[jmb][1]=Os_xyl_local
                                         Os_membranes[jmb][1]=Os_xyl_local
@@ -2528,11 +2439,11 @@ def mecha(directory='./MECHA/',     #Project
                                         s_membranes[jmb]=0.0
                                         OsWallLayer[row][iMaturity][count]+=Os_xyl_local #float(Os_xyl[0][count])
                                         nOsWallLayer[row][iMaturity][count]+=1
-                                K=Kmb[jmb]
-                                rhs_o[i]+= K*s_membranes[jmb]*(Os_walls[i] - Os_cells[j-NwallsJun]) #Wall node
-                                rhs_o[j]+= K*s_membranes[jmb]*(Os_cells[j-NwallsJun] - Os_walls[i]) #Cell node 
+                                K=Kmb[jmb][0]
+                                rhs_o[i]+= K*s_membranes[jmb]*(Os_walls[i] - Os_cells[j-n_wall_junction]) #Wall node
+                                rhs_o[j]+= K*s_membranes[jmb]*(Os_cells[j-n_wall_junction] - Os_walls[i]) #Cell node 
                                 jmb+=1
-                for row in range(int(r_discret[0])):
+                for row in range(int(r_discret[0][0])):
                     if nOsWallLayer[row][iMaturity][count]>0:
                         OsWallLayer[row][iMaturity][count]=OsWallLayer[row][iMaturity][count]/nOsWallLayer[row][iMaturity][count]
                     if nOsCellLayer[row][iMaturity][count]>0:
@@ -2625,8 +2536,8 @@ def mecha(directory='./MECHA/',     #Project
                 for ind in Borderwall:
                     Q=rhs_s[ind]*(soln[ind]-(Psi_soil[0][count]*(1-x_rel[ind])+Psi_soil[1][count]*x_rel[ind]))
                     Q_soil.append(Q) #(cm^3/d) Positive for water flowing into the root, rhs_s is minus the conductance at the soil root interface
-                    if Apo_Contagion==2:
-                        if Sym_Contagion==2:
+                    if general.apo_contagion==2:
+                        if general.sym_contagion==2:
                             if ind not in Apo_w_Zombies0:
                                 if Q<0.0:
                                     matrix_C[ind][ind]+=Q
@@ -2635,7 +2546,7 @@ def mecha(directory='./MECHA/',     #Project
                                 if Q<0.0:
                                     matrix_ApoC[ind][ind]+=Q
                     #if C_flag and Os_soil[5][count]==1:
-                    #if Apo_Contagion==2:
+                    #if general.apo_contagion==2:
                     #    #if not Q==0:
                     #    #    list_walls_apo_conv.append(ind)
                     #    if Q>0:
@@ -2646,8 +2557,8 @@ def mecha(directory='./MECHA/',     #Project
                 for ind in Borderjunction:
                     Q=rhs_s[ind]*(soln[ind]-(Psi_soil[0][count]*(1-x_rel[ind])+Psi_soil[1][count]*x_rel[ind]))
                     Q_soil.append(Q) #(cm^3/d) Positive for water flowing into the root
-                    if Apo_Contagion==2:
-                        if Sym_Contagion==2:
+                    if general.apo_contagion==2:
+                        if general.sym_contagion==2:
                             if ind not in Apo_j_Zombies0:
                                 if Q<0.0:
                                     matrix_C[ind][ind]+=Q
@@ -2667,10 +2578,10 @@ def mecha(directory='./MECHA/',     #Project
                 if Barrier>0:
                     if not isnan(Psi_xyl[iMaturity][count]): #Xylem pressure BC
                         for cid in listxyl:
-                            Q=rhs_x[cid]*(soln[cid]-Psi_xyl[iMaturity][count])
+                            Q=rhs_x[cid][0]*(soln[cid][0]-Psi_xyl[iMaturity][count])
                             Q_xyl.append(Q) #(cm^3/d) Negative for water flowing into xylem tubes
-                            rank=int(Cell_rank[cid-NwallsJun])
-                            row=int(rank2row[rank])
+                            rank=int(Cell_rank[cid-n_wall_junction][0])
+                            row=int(rank2row[rank][0])
                             Q_xyl_layer[row][iMaturity][count] += Q
                             #if C_flag:
                             #    if Q>0: #Water leaving the cross-section
@@ -2680,10 +2591,10 @@ def mecha(directory='./MECHA/',     #Project
                             #    rhs_C[cid][0] *= Os_xyl[1][count]
                     elif not isnan(Flow_xyl[0][count]): #Xylem flow BC
                         for cid in listxyl:
-                            Q=-rhs_x[cid]
+                            Q=-rhs_x[cid][0]
                             Q_xyl.append(Q) #(cm^3/d) Negative for water flowing into xylem tubes
-                            rank=int(Cell_rank[cid-NwallsJun])
-                            row=int(rank2row[rank])
+                            rank=int(Cell_rank[cid-n_wall_junction][0])
+                            row=int(rank2row[rank][0])
                             Q_xyl_layer[row][iMaturity][count] += Q
                             #if C_flag:
                             #    if Q>0: #Water leaving the cross-section
@@ -2696,43 +2607,43 @@ def mecha(directory='./MECHA/',     #Project
                 if Barrier==0:
                     if not isnan(Psi_sieve[iMaturity][count]): #Phloem pressure BC
                         for cid in listprotosieve: #Q will be 0 for metaphloem if Barrier==0 because rhs_p=0 for these cells
-                            Q=rhs_p[cid]*(soln[cid]-Psi_sieve[iMaturity][count])
+                            Q=rhs_p[cid]*(soln[cid][0]-Psi_sieve[iMaturity][count])
                             Q_sieve.append(Q) #(cm^3/d) Positive for water flowing from sieve tubes
-                            rank=int(Cell_rank[cid-NwallsJun])
-                            row=int(rank2row[rank])
+                            rank=int(Cell_rank[cid-n_wall_junction][0])
+                            row=int(rank2row[rank][0])
                             Q_sieve_layer[row][iMaturity][count] += Q
                     elif not isnan(Flow_sieve[0][count]): #Phloem flow BC
                         for cid in listprotosieve:
                             Q=-rhs_p[cid]
                             Q_sieve.append(Q) #(cm^3/d) Negative for water flowing into xylem tubes
-                            rank=int(Cell_rank[cid-NwallsJun])
-                            row=int(rank2row[rank])
+                            rank=int(Cell_rank[cid-n_wall_junction][0])
+                            row=int(rank2row[rank][0])
                             Q_sieve_layer[row][iMaturity][count] += Q
                 elif Barrier>0:
                     if not isnan(Psi_sieve[iMaturity][count]): #Phloem pressure BC
                         for cid in listsieve: #Q will be 0 for metaphloem if Barrier==0 because rhs_p=0 for these cells
-                            Q=rhs_p[cid]*(soln[cid]-Psi_sieve[iMaturity][count])
+                            Q=rhs_p[cid]*(soln[cid][0]-Psi_sieve[iMaturity][count])
                             Q_sieve.append(Q) #(cm^3/d) Positive for water flowing from sieve tubes
-                            rank=int(Cell_rank[cid-NwallsJun])
-                            row=int(rank2row[rank])
+                            rank=int(Cell_rank[cid-n_wall_junction][0])
+                            row=int(rank2row[rank][0])
                             Q_sieve_layer[row][iMaturity][count] += Q
                     elif not isnan(Flow_sieve[0][count]): #Phloem flow BC
                         for cid in listsieve:
                             Q=-rhs_p[cid]
                             Q_sieve.append(Q) #(cm^3/d) Negative for water flowing into xylem tubes
-                            rank=int(Cell_rank[cid-NwallsJun])
-                            row=int(rank2row[rank])
+                            rank=int(Cell_rank[cid-n_wall_junction][0])
+                            row=int(rank2row[rank][0])
                             Q_sieve_layer[row][iMaturity][count] += Q
                 Q_elong=-rhs_e #(cm^3/d) The elongation flux virtually disappears from the cross-section => negative
-                for cid in range(Ncells):
+                for cid in range(n_cells):
                     rank=int(Cell_rank[cid])
-                    row=int(rank2row[rank])
-                    Q_elong_layer[row][iMaturity][count] += Q_elong[NwallsJun+cid]
+                    row=int(rank2row[rank][0])
+                    Q_elong_layer[row][iMaturity][count] += Q_elong[n_wall_junction+cid]
                 Q_tot[iMaturity][count]=sum(Q_soil) #(cm^3/d) Total flow rate at root surface
-                for ind in range(NwallsJun,len(G.node)): #NwallsJun is the index of the first cell
-                    cellnumber1=ind-NwallsJun
+                for ind in range(n_wall_junction,len(G.nodes)): #n_wall_junction is the index of the first cell
+                    cellnumber1=ind-n_wall_junction
                     rank = int(Cell_rank[cellnumber1])
-                    row = int(rank2row[rank])
+                    row = int(rank2row[rank][0])
                     if rank == 1: #Exodermis
                         PsiCellLayer[row][iMaturity][count] += soln[ind]*(STFcell_plus[cellnumber1][iMaturity]+abs(STFcell_minus[cellnumber1][iMaturity]))/(STFlayer_plus[row][iMaturity]+abs(STFlayer_minus[row][iMaturity])+STFlayer_plus[row+1][iMaturity]+abs(STFlayer_minus[row+1][iMaturity])) #(hPa)
                         PsiCellLayer[row+1][iMaturity][count] += soln[ind]*(STFcell_plus[cellnumber1][iMaturity]+abs(STFcell_minus[cellnumber1][iMaturity]))/(STFlayer_plus[row][iMaturity]+abs(STFlayer_minus[row][iMaturity])+STFlayer_plus[row+1][iMaturity]+abs(STFlayer_minus[row+1][iMaturity])) #(hPa)
@@ -2752,17 +2663,17 @@ def mecha(directory='./MECHA/',     #Project
                 if Barrier>0 and isnan(Psi_xyl[iMaturity][count]):
                     Psi_xyl[iMaturity][count]=0.0
                     for cid in listxyl:
-                        Psi_xyl[iMaturity][count]+=soln[cid]/Nxyl
+                        Psi_xyl[iMaturity][count]+=soln[cid][0]/Nxyl
                 if Barrier>0:
                     if isnan(Psi_sieve[iMaturity][count]):
                         Psi_sieve[iMaturity][count]=0.0
                         for cid in listsieve:
-                            Psi_sieve[iMaturity][count]+=soln[cid]/Nsieve #Average of phloem water pressures
+                            Psi_sieve[iMaturity][count]+=soln[cid][0]/Nsieve #Average of phloem water pressures
                 elif Barrier==0:
                     if isnan(Psi_sieve[iMaturity][count]):
                         Psi_sieve[iMaturity][count]=0.0
                         for cid in listprotosieve:
-                            Psi_sieve[iMaturity][count]+=soln[cid]/Nprotosieve #Average of protophloem water pressures
+                            Psi_sieve[iMaturity][count]+=soln[cid][0]/Nprotosieve #Average of protophloem water pressures
                 
                 print("Uptake rate per unit root length: soil ",(sum(Q_soil)/height/1.0E-04),"cm^2/d, xylem ",(sum(Q_xyl)/height/1.0E-04),"cm^2/d, phloem ",(sum(Q_sieve)/height/1.0E-04),"cm^2/d, elongation ",(sum(Q_elong)/height/1.0E-04),"cm^2/d")
                 if not isnan(sum(Q_sieve)):
@@ -2786,9 +2697,9 @@ def mecha(directory='./MECHA/',     #Project
                 Fcw_list=[]
                 Fcc_list=[]
                 jmb=0 #Index for membrane conductance vector
-                for node, edges in G.adjacency_iter() : #adjacency_iter returns an iterator of (node, adjacency dict) tuples for all nodes. This is the fastest way to look at every edge. For directed graphs, only outgoing adjacencies are included.
+                for node, edges in G.adjacency() : #adjacency_iter returns an iterator of (node, adjacency dict) tuples for all nodes. This is the fastest way to look at every edge. For directed graphs, only outgoing adjacencies are included.
                     i = indice[node] #Node ID number
-                    psi = soln[i] #Node water potential
+                    psi = soln[i][0]  #Node water potential
                     psi_o_cell = inf #Opposite cell water potential
                     ind_o_cell = inf #Opposite cell index
                     #Here we count surrounding cell types in order to know if the wall is part of an apoplastic barrier, as well as to know on which side of the exodermis or endodermis the membrane is located
@@ -2806,74 +2717,74 @@ def mecha(directory='./MECHA/',     #Project
                     count_passage=0 #total number of passage cells around the wall
                     count_interC=0 #total number of intercellular spaces around the wall
                     noPD=False #Initializes the flag for wall connected to an intercellular space -> does not have plasmodesmata
-                    if i<Nwalls: #wall ID
+                    if i<n_walls: #wall ID
                         for neighboor, eattr in edges.items(): #Loop on connections (edges)
                             if eattr['path'] == 'membrane': #Wall connection
-                                if any(passage_cell_ID==array((indice[neighboor])-NwallsJun)):
+                                if any(passage_cell_ID==array((indice[neighboor])-n_wall_junction)):
                                     count_passage+=1
-                                if any(InterCid==array((indice[neighboor])-NwallsJun)):
+                                if any(geometry.intercellular_ids==array((indice[neighboor])-n_wall_junction)):
                                     count_interC+=1
-                                if G.node[neighboor]['cgroup']==3:#Endodermis
+                                if G.nodes[neighboor]['cgroup']==3:#Endodermis
                                     count_endo+=1
-                                elif G.node[neighboor]['cgroup']==13 or G.node[neighboor]['cgroup']==19 or G.node[neighboor]['cgroup']==20:#Xylem cell or vessel
+                                elif G.nodes[neighboor]['cgroup']==13 or G.nodes[neighboor]['cgroup']==19 or G.nodes[neighboor]['cgroup']==20:#Xylem cell or vessel
                                     count_xyl+=1
-                                elif G.node[neighboor]['cgroup']==16 or G.node[neighboor]['cgroup']==21:#Pericycle or stele
+                                elif G.nodes[neighboor]['cgroup']==16 or G.nodes[neighboor]['cgroup']==21:#Pericycle or stele
                                     count_peri+=1
                                     if neighboor in PPP:
                                         count_PPP+=1
-                                elif G.node[neighboor]['cgroup']==1:#Exodermis
+                                elif G.nodes[neighboor]['cgroup']==1:#Exodermis
                                     count_exo+=1
-                                elif G.node[neighboor]['cgroup']==2:#Epidermis
+                                elif G.nodes[neighboor]['cgroup']==2:#Epidermis
                                     count_epi+=1
-                                elif G.node[neighboor]['cgroup']==4:#Cortex
+                                elif G.nodes[neighboor]['cgroup']==4:#Cortex
                                     count_cortex+=1
-                                elif G.node[neighboor]['cgroup']==5:#Stelar parenchyma
+                                elif G.nodes[neighboor]['cgroup']==5:#Stelar parenchyma
                                     count_stele+=1
-                                elif G.node[neighboor]['cgroup']==11 or G.node[neighboor]['cgroup']==23:#Phloem sieve tube
+                                elif G.nodes[neighboor]['cgroup']==11 or G.nodes[neighboor]['cgroup']==23:#Phloem sieve tube
                                     count_sieve+=1
-                                elif G.node[neighboor]['cgroup']==12 or G.node[neighboor]['cgroup']==26:#Companion cell
+                                elif G.nodes[neighboor]['cgroup']==12 or G.nodes[neighboor]['cgroup']==26:#Companion cell
                                     count_comp+=1
-                                if G.node[neighboor]['cgroup']>4:#Stele overall
+                                if G.nodes[neighboor]['cgroup']>4:#Stele overall
                                     count_stele_overall+=1
                     ijunction=0
                     for neighboor, eattr in edges.items(): #Loop on connections (edges)
                         j = indice[neighboor] #Neighbouring node ID number
                         #if j > i: #Only treating the information one way to save time
-                        psin = soln[j] #Neighbouring node water potential
+                        psin = soln[j][0] #Neighbouring node water potential
                         path = eattr['path'] #eattr is the edge attribute (i.e. connection type)
-                        if i<Nwalls:
-                            if Paraview==1 or ParTrack==1 or Apo_Contagion>0 or Sym_Contagion>0:
+                        if i<n_walls:
+                            if general.paraview==1 or general.par_track==1 or general.apo_contagion>0 or general.sym_contagion>0:
                                 if path == "wall":
-                                    #K = eattr['kw']*1.0E-04*((eattr['lat_dist']+height)*eattr['thickness']-square(eattr['thickness']))/eattr['length'] #Junction-Wall conductance (cm^3/hPa/d)
-                                    if (count_interC>=2 and Barrier>0) or (count_xyl==2 and Xylem_pieces): #"Fake wall" splitting an intercellular space or a xylem cell in two
+                                    #K = eattr['kw']*1.0E-04*((eattr['lat_dist']+height)*eattr['geometry.thickness']-square(eattr['geometry.thickness']))/eattr['length'] #Junction-Wall conductance (cm^3/hPa/d)
+                                    if (count_interC>=2 and Barrier>0) or (count_xyl==2 and geometry.xylem_pieces): #"Fake wall" splitting an intercellular space or a xylem cell in two
                                         K = 1.0E-16 #Non conductive
                                     elif count_cortex>=2: #wall between two cortical cells
-                                        K = kw_cortex_cortex*1.0E-04*((eattr['lat_dist']+height)*thickness-square(thickness))/eattr['length'] #Junction-Wall conductance (cm^3/hPa/d)
+                                        K = kw_cortex_cortex*1.0E-04*((eattr['lat_dist']+height)*geometry.thickness-square(geometry.thickness))/eattr['length'] #Junction-Wall conductance (cm^3/hPa/d)
                                     elif count_endo>=2: #wall between two endodermis cells
-                                        K = kw_endo_endo*1.0E-04*((eattr['lat_dist']+height)*thickness-square(thickness))/eattr['length'] #Junction-Wall conductance (cm^3/hPa/d)
+                                        K = kw_endo_endo*1.0E-04*((eattr['lat_dist']+height)*geometry.thickness-square(geometry.thickness))/eattr['length'] #Junction-Wall conductance (cm^3/hPa/d)
                                     elif count_stele_overall>0 and count_endo>0: #wall between endodermis and pericycle
                                         if count_passage>0:
-                                            K = kw_passage*1.0E-04*((eattr['lat_dist']+height)*thickness-square(thickness))/eattr['length']
+                                            K = kw_passage*1.0E-04*((eattr['lat_dist']+height)*geometry.thickness-square(geometry.thickness))/eattr['length']
                                         else:
-                                            K = kw_endo_peri*1.0E-04*((eattr['lat_dist']+height)*thickness-square(thickness))/eattr['length'] #Junction-Wall conductance (cm^3/hPa/d)
+                                            K = kw_endo_peri*1.0E-04*((eattr['lat_dist']+height)*geometry.thickness-square(geometry.thickness))/eattr['length'] #Junction-Wall conductance (cm^3/hPa/d)
                                     elif count_stele_overall==0 and count_endo==1: #wall between endodermis and cortex
                                         if count_passage>0:
-                                            K = kw_passage*1.0E-04*((eattr['lat_dist']+height)*thickness-square(thickness))/eattr['length']
+                                            K = kw_passage*1.0E-04*((eattr['lat_dist']+height)*geometry.thickness-square(geometry.thickness))/eattr['length']
                                         else:
-                                            K = kw_endo_cortex*1.0E-04*((eattr['lat_dist']+height)*thickness-square(thickness))/eattr['length'] #Junction-Wall conductance (cm^3/hPa/d)
+                                            K = kw_endo_cortex*1.0E-04*((eattr['lat_dist']+height)*geometry.thickness-square(geometry.thickness))/eattr['length'] #Junction-Wall conductance (cm^3/hPa/d)
                                     elif count_exo>=2: #wall between two exodermis cells
-                                        K = kw_exo_exo*1.0E-04*((eattr['lat_dist']+height)*thickness-square(thickness))/eattr['length'] #Junction-Wall conductance (cm^3/hPa/d)
+                                        K = kw_exo_exo*1.0E-04*((eattr['lat_dist']+height)*geometry.thickness-square(geometry.thickness))/eattr['length'] #Junction-Wall conductance (cm^3/hPa/d)
                                     else: #other walls
-                                        K = kw*1.0E-04*((eattr['lat_dist']+height)*thickness-square(thickness))/eattr['length'] #Junction-Wall conductance (cm^3/hPa/d)
+                                        K = kw*1.0E-04*((eattr['lat_dist']+height)*geometry.thickness-square(geometry.thickness))/eattr['length'] #Junction-Wall conductance (cm^3/hPa/d)
                                     Fjw = K * (psin - psi) * sign(j-i) #(cm^3/d) Water flow rate positive from junction to wall
                                     Fjw_list.append((i,j,Fjw))
                                     #The ordering in WallFlowDensity will correspond to the one of ThickWallsX, saved for display only
-                                    WallFlowDensity.append((i,j, Fjw / (((eattr['lat_dist']+height)*thickness-square(thickness))*1.0E-08))) # (cm/d) Positive towards lower node ID 
+                                    WallFlowDensity.append((i,j, Fjw / (((eattr['lat_dist']+height)*geometry.thickness-square(geometry.thickness))*1.0E-08))) # (cm/d) Positive towards lower node ID 
                                     cos_angle=(position[i][0]-position[j][0])/(hypot(position[j][0]-position[i][0],position[j][1]-position[i][1])) #Vectors junction1-wall
-                                    WallFlowDensity_cos.append((i,j, cos_angle * Fjw / (((eattr['lat_dist']+height)*thickness-square(thickness))*1.0E-08))) # (cm/d) Positive towards lower node ID 
+                                    WallFlowDensity_cos.append((i,j, cos_angle * Fjw / (((eattr['lat_dist']+height)*geometry.thickness-square(geometry.thickness))*1.0E-08))) # (cm/d) Positive towards lower node ID 
                                     #if C_flag and Os_soil[5][count]*Os_xyl[5][count]==1:
-                                    if Apo_Contagion==2:
-                                        if Sym_Contagion==2: # Apo & Sym contagion
+                                    if general.apo_contagion==2:
+                                        if general.sym_contagion==2: # Apo & Sym contagion
                                             if Fjw>0: #Flow from junction to wall
                                                 if i not in Apo_w_Zombies0:
                                                     matrix_C[i][j] += Fjw
@@ -2896,7 +2807,7 @@ def mecha(directory='./MECHA/',     #Project
                                                 if j not in Apo_j_Zombies0:
                                                     matrix_ApoC[j][i] -= Fjw
                                     
-                                    if Apo_Contagion==1:
+                                    if general.apo_contagion==1:
                                         if Fjw>0:
                                             Apo_connec_flow[j][nApo_connec_flow[j]]=i
                                             nApo_connec_flow[j]+=1
@@ -2905,26 +2816,26 @@ def mecha(directory='./MECHA/',     #Project
                                             nApo_connec_flow[i]+=1
                                 elif path == "membrane": #Membrane connection
                                     #K = (eattr['kmb']+eattr['kaqp'])*1.0E-08*(height+eattr['dist'])*eattr['length']
-                                    if G.node[j]['cgroup']==1: #Exodermis
+                                    if G.nodes[j]['cgroup']==1: #Exodermis
                                         kaqp=kaqp_exo
-                                    elif G.node[j]['cgroup']==2: #Epidermis
+                                    elif G.nodes[j]['cgroup']==2: #Epidermis
                                         kaqp=kaqp_epi
-                                    elif G.node[j]['cgroup']==3: #Endodermis
+                                    elif G.nodes[j]['cgroup']==3: #Endodermis
                                         kaqp=kaqp_endo
-                                    elif G.node[j]['cgroup']==13 or G.node[j]['cgroup']==19 or G.node[j]['cgroup']==20: #xylem cell or vessel
+                                    elif G.nodes[j]['cgroup']==13 or G.nodes[j]['cgroup']==19 or G.nodes[j]['cgroup']==20: #xylem cell or vessel
                                         if Barrier>0: #Xylem vessel
                                             kaqp=kaqp_stele*10000 #No membrane resistance because no membrane
                                             noPD=True
                                         elif Barrier==0: #Xylem cell
                                             kaqp=kaqp_stele
-                                            if (count_xyl==2 and Xylem_pieces):
+                                            if (count_xyl==2 and geometry.xylem_pieces):
                                                 noPD=True
-                                    elif G.node[j]['cgroup']>4: #Stele and pericycle
+                                    elif G.nodes[j]['cgroup']>4: #Stele and pericycle
                                         kaqp=kaqp_stele
-                                    elif (j-NwallsJun in InterCid) and Barrier>0: #the neighbour is an intercellular space "cell"
-                                        kaqp=kInterC
+                                    elif (j-n_wall_junction in geometry.intercellular_ids) and Barrier>0: #the neighbour is an intercellular space "cell"
+                                        kaqp=geometry.k_interc
                                         noPD=True
-                                    elif G.node[j]['cgroup']==4: #Cortex
+                                    elif G.nodes[j]['cgroup']==4: #Cortex
                                         kaqp=float(a_cortex*dist_grav[wid]*1.0E-04+b_cortex) #AQP activity (cm/hPa/d)
                                         if kaqp < 0:
                                             error('Error, negative kaqp in cortical cell, adjust Paqp_cortex')
@@ -2933,84 +2844,84 @@ def mecha(directory='./MECHA/',     #Project
                                         if kw_endo_endo==0.00:
                                             K=0.00
                                         else:
-                                            K = 1/(1/(kw_endo_endo/(thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length'] #(cm^3/hPa/d)
+                                            K = 1/(1/(kw_endo_endo/(geometry.thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length'] #(cm^3/hPa/d)
                                     elif count_exo>=2: #wall between two exodermis cells, in this case the suberized wall can limit the transfer of water between cell and wall
                                         if kw_exo_exo==0.00:
                                             K=0.00
                                         else:
-                                            K = 1/(1/(kw_exo_exo/(thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length'] #(cm^3/hPa/d)
+                                            K = 1/(1/(kw_exo_exo/(geometry.thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length'] #(cm^3/hPa/d)
                                     elif count_stele_overall>0 and count_endo>0: #wall between endodermis and pericycle, in this case the suberized wall can limit the transfer of water between cell and wall
                                         if count_passage>0:
-                                            K = 1/(1/(kw_passage/(thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
+                                            K = 1/(1/(kw_passage/(geometry.thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
                                         else:
                                             if kw_endo_peri==0.00:
                                                 K=0.00
                                             else:
-                                                K = 1/(1/(kw_endo_peri/(thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
+                                                K = 1/(1/(kw_endo_peri/(geometry.thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
                                     elif count_stele_overall==0 and count_endo==1: #wall between endodermis and cortex, in this case the suberized wall can limit the transfer of water between cell and wall
                                         if kaqp==0.0:
                                             K=1.00E-16
                                         else:
                                             if count_passage>0:
-                                                K = 1/(1/(kw_passage/(thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
+                                                K = 1/(1/(kw_passage/(geometry.thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
                                             else:
                                                 if kw_endo_cortex==0.00:
                                                     K=0.00
                                                 else:
-                                                    K = 1/(1/(kw_endo_cortex/(thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
+                                                    K = 1/(1/(kw_endo_cortex/(geometry.thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length']
                                     else:
                                         if kaqp==0.0:
                                             K=1.00E-16
                                         else:
-                                            K = 1/(1/(kw/(thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length'] #(cm^3/hPa/d)
-                                    Fcw = K * (psi - psin + s_membranes[jmb]*(Os_walls[i] - Os_cells[j-NwallsJun])) #(cm^3/d) Water flow rate positive from wall to protoplast
+                                            K = 1/(1/(kw/(geometry.thickness/2*1.0E-04))+1/(kmb+kaqp))*1.0E-08*(height+eattr['dist'])*eattr['length'] #(cm^3/hPa/d)
+                                    Fcw = K * (psi - psin + s_membranes[jmb]*(Os_walls[i] - Os_cells[j-n_wall_junction])) #(cm^3/d) Water flow rate positive from wall to protoplast
                                     Fcw_list.append((i,j,-Fcw,s_membranes[jmb])) #Water flow rate positive from protoplast to wall
                                     #Flow densities calculation
                                     #The ordering in MembraneFlowDensity will correspond to the one of ThickWalls, saved for display only 
                                     MembraneFlowDensity.append(Fcw / (1.0E-08*(height+eattr['dist'])*eattr['length']))
                                     ####Solute convection across membranes####
-                                    if Apo_Contagion==2 and Sym_Contagion==2:
+                                    if general.apo_contagion==2 and general.sym_contagion==2:
                                         if Fcw>0: #Flow from wall to protoplast
                                             if i not in Apo_w_Zombies0:
-                                                if D2O1==1:#Solute that moves across membranes like water 
+                                                if hormones.d2o1==1:#Solute that moves across membranes like water 
                                                     matrix_C[i][i] -= Fcw
                                                 else: #Solute that moves across membranes independently of water (the membrane is possibly not one) 
                                                     matrix_C[i][i] -= Fcw*(1-s_membranes[jmb])
-                                            if j-NwallsJun not in Sym_Zombie0:
-                                                if D2O1==1:#Solute that moves across membranes like water 
+                                            if j-n_wall_junction not in hormones.sym_zombie0:
+                                                if hormones.d2o1==1:#Solute that moves across membranes like water 
                                                     matrix_C[j][i] += Fcw
                                                 else: #Solute that moves across membranes independently of water (the membrane is possibly not one) 
                                                     matrix_C[j][i] += Fcw*(1-s_membranes[jmb])
                                         else: #Flow from protoplast to wall
-                                            if j-NwallsJun not in Sym_Zombie0:
-                                                if D2O1==1:#Solute that moves across membranes like water 
+                                            if j-n_wall_junction not in hormones.sym_zombie0:
+                                                if hormones.d2o1==1:#Solute that moves across membranes like water 
                                                     matrix_C[j][j] += Fcw
                                                 else: #Solute that moves across membranes independently of water (the membrane is possibly not one) 
                                                     matrix_C[j][j] += Fcw*(1-s_membranes[jmb])
                                             if i not in Apo_w_Zombies0:
-                                                if D2O1==1:#Solute that moves across membranes like water 
+                                                if hormones.d2o1==1:#Solute that moves across membranes like water 
                                                     matrix_C[i][j] -= Fcw
                                                 else: #Solute that moves across membranes independently of water (the membrane is possibly not one) 
                                                     matrix_C[i][j] -= Fcw*(1-s_membranes[jmb])
                                     
                                     #Macroscopic distributed parameter for transmembrane flow
                                     #Discretization based on cell layers and apoplasmic barriers
-                                    rank = int(Cell_rank[j-NwallsJun])
-                                    row = int(rank2row[rank])
+                                    rank = int(Cell_rank[j-n_wall_junction])
+                                    row = int(rank2row[rank][0])
                                     if rank == 1 and count_epi > 0: #Outer exodermis
                                         row += 1
                                     if rank == 3 and count_cortex > 0: #Outer endodermis
-                                        if any(passage_cell_ID==array(j-NwallsJun)) and Barrier==2:
+                                        if any(passage_cell_ID==array(j-n_wall_junction)) and Barrier==2:
                                             row += 2
                                         else:
                                             row += 3
                                     elif rank == 3 and count_stele_overall > 0: #Inner endodermis
-                                        if any(passage_cell_ID==array(j-NwallsJun)) and Barrier==2:
+                                        if any(passage_cell_ID==array(j-n_wall_junction)) and Barrier==2:
                                             row += 1
                                             #print('PsiWallPassage:',psi)
-                                    Flow = K * (psi - psin + s_membranes[jmb]*(Os_walls[i] - Os_cells[j-NwallsJun]))
+                                    Flow = K * (psi - psin + s_membranes[jmb]*(Os_walls[i] - Os_cells[j-n_wall_junction]))
                                     jmb+=1
-                                    if ((j-NwallsJun not in InterCid) and (j not in listxyl)) or Barrier==0: #No aerenchyma in the elongation zone
+                                    if ((j-n_wall_junction not in geometry.intercellular_ids) and (j not in listxyl)) or Barrier==0: #No aerenchyma in the elongation zone
                                         if Flow > 0 :
                                             UptakeLayer_plus[row][iMaturity][count] += Flow #grouping membrane flow rates in cell layers
                                         else:
@@ -3087,84 +2998,84 @@ def mecha(directory='./MECHA/',     #Project
                                         else:
                                             Fcc_list.append((j,ind_o_cell,Fcc))
                                         #if C_flag:
-                                        if Sym_Contagion==2: #Convection across plasmodesmata
-                                            if Apo_Contagion==2: #Apo & Sym Contagion
+                                        if general.sym_contagion==2: #Convection across plasmodesmata
+                                            if general.apo_contagion==2: #Apo & Sym Contagion
                                                 if Fcc>0: #Flow from high index to low index cell
                                                     if ind_o_cell<j: #From j to ind_o_cell
-                                                        if j-NwallsJun not in Sym_Zombie0:
+                                                        if j-n_wall_junction not in hormones.sym_zombie0:
                                                             matrix_C[j][j] -= Fcc
-                                                        if ind_o_cell-NwallsJun not in Sym_Zombie0:
+                                                        if ind_o_cell-n_wall_junction not in hormones.sym_zombie0:
                                                             matrix_C[ind_o_cell][j] += Fcc
                                                     else: #From ind_o_cell to j
-                                                        if ind_o_cell-NwallsJun not in Sym_Zombie0:
+                                                        if ind_o_cell-n_wall_junction not in hormones.sym_zombie0:
                                                             matrix_C[ind_o_cell][ind_o_cell] -= Fcc
-                                                        if j-NwallsJun not in Sym_Zombie0:
+                                                        if j-n_wall_junction not in hormones.sym_zombie0:
                                                             matrix_C[j][ind_o_cell] += Fcc
                                                 else: #Flow from low index to high index cell
                                                     if ind_o_cell<j: #From ind_o_cell to j
-                                                        if ind_o_cell-NwallsJun not in Sym_Zombie0:
+                                                        if ind_o_cell-n_wall_junction not in hormones.sym_zombie0:
                                                             matrix_C[ind_o_cell][ind_o_cell] += Fcc
-                                                        if j-NwallsJun not in Sym_Zombie0:
+                                                        if j-n_wall_junction not in hormones.sym_zombie0:
                                                             matrix_C[j][ind_o_cell] -= Fcc
                                                     else: #From j to ind_o_cell
-                                                        if j-NwallsJun not in Sym_Zombie0:
+                                                        if j-n_wall_junction not in hormones.sym_zombie0:
                                                             matrix_C[j][j] += Fcc
-                                                        if ind_o_cell-NwallsJun not in Sym_Zombie0:
+                                                        if ind_o_cell-n_wall_junction not in hormones.sym_zombie0:
                                                             matrix_C[ind_o_cell][j] -= Fcc
                                             else: #Only Sym contagion
                                                 if Fcc>0: #Flow from high index to low index cell
                                                     if ind_o_cell<j: #From j to ind_o_cell
-                                                        if j-NwallsJun not in Sym_Zombie0:
-                                                            matrix_SymC[j-NwallsJun][j-NwallsJun] -= Fcc
-                                                        if ind_o_cell-NwallsJun not in Sym_Zombie0:
-                                                            matrix_SymC[ind_o_cell-NwallsJun][j-NwallsJun] += Fcc
+                                                        if j-n_wall_junction not in hormones.sym_zombie0:
+                                                            matrix_SymC[j-n_wall_junction][j-n_wall_junction] -= Fcc
+                                                        if ind_o_cell-n_wall_junction not in hormones.sym_zombie0:
+                                                            matrix_SymC[ind_o_cell-n_wall_junction][j-n_wall_junction] += Fcc
                                                     else: #From ind_o_cell to j
-                                                        if ind_o_cell-NwallsJun not in Sym_Zombie0:
-                                                            matrix_SymC[ind_o_cell-NwallsJun][ind_o_cell-NwallsJun] -= Fcc
-                                                        if j-NwallsJun not in Sym_Zombie0:
-                                                            matrix_SymC[j-NwallsJun][ind_o_cell-NwallsJun] += Fcc
+                                                        if ind_o_cell-n_wall_junction not in hormones.sym_zombie0:
+                                                            matrix_SymC[ind_o_cell-n_wall_junction][ind_o_cell-n_wall_junction] -= Fcc
+                                                        if j-n_wall_junction not in hormones.sym_zombie0:
+                                                            matrix_SymC[j-n_wall_junction][ind_o_cell-n_wall_junction] += Fcc
                                                 else: #Flow from low index to high index cell
                                                     if ind_o_cell<j: #From ind_o_cell to j
-                                                        if ind_o_cell-NwallsJun not in Sym_Zombie0:
-                                                            matrix_SymC[ind_o_cell-NwallsJun][ind_o_cell-NwallsJun] += Fcc
-                                                        if j-NwallsJun not in Sym_Zombie0:
-                                                            matrix_SymC[j-NwallsJun][ind_o_cell-NwallsJun] -= Fcc
+                                                        if ind_o_cell-n_wall_junction not in hormones.sym_zombie0:
+                                                            matrix_SymC[ind_o_cell-n_wall_junction][ind_o_cell-n_wall_junction] += Fcc
+                                                        if j-n_wall_junction not in hormones.sym_zombie0:
+                                                            matrix_SymC[j-n_wall_junction][ind_o_cell-n_wall_junction] -= Fcc
                                                     else: #From j to ind_o_cell
-                                                        if j-NwallsJun not in Sym_Zombie0:
-                                                            matrix_SymC[j-NwallsJun][j-NwallsJun] += Fcc
-                                                        if ind_o_cell-NwallsJun not in Sym_Zombie0:
-                                                            matrix_SymC[ind_o_cell-NwallsJun][j-NwallsJun] -= Fcc
+                                                        if j-n_wall_junction not in hormones.sym_zombie0:
+                                                            matrix_SymC[j-n_wall_junction][j-n_wall_junction] += Fcc
+                                                        if ind_o_cell-n_wall_junction not in hormones.sym_zombie0:
+                                                            matrix_SymC[ind_o_cell-n_wall_junction][j-n_wall_junction] -= Fcc
                                         
-                                        if Sym_Contagion==1:
+                                        if general.sym_contagion==1:
                                             itemp=0
-                                            while not Cell_connec[ind_o_cell-NwallsJun][itemp] == j-NwallsJun:
+                                            while not Cell_connec[ind_o_cell-n_wall_junction][itemp] == j-n_wall_junction:
                                                 itemp+=1
-                                            Cell_connec_flow[ind_o_cell-NwallsJun][itemp]=sign(temp)
+                                            Cell_connec_flow[ind_o_cell-n_wall_junction][itemp]=sign(temp)
                                             itemp=0
-                                            while not Cell_connec[j-NwallsJun][itemp] == ind_o_cell-NwallsJun:
+                                            while not Cell_connec[j-n_wall_junction][itemp] == ind_o_cell-n_wall_junction:
                                                 itemp+=1
-                                            Cell_connec_flow[j-NwallsJun][itemp]=-sign(temp)
-                            elif Paraview==0 and ParTrack==0:
+                                            Cell_connec_flow[j-n_wall_junction][itemp]=-sign(temp)
+                            elif general.paraview==0 and general.par_track==0:
                                 if path == "membrane": #Membrane connection
-                                    K=Kmb[jmb]
+                                    K=Kmb[jmb][0]
                                     #Flow densities calculation
                                     #Macroscopic distributed parameter for transmembrane flow
                                     #Discretization based on cell layers and apoplasmic barriers
-                                    rank = int(Cell_rank[j-NwallsJun])
-                                    row = int(rank2row[rank])
+                                    rank = int(Cell_rank[j-n_wall_junction])
+                                    row = int(rank2row[rank][0])
                                     if rank == 1 and count_epi > 0: #Outer exodermis
                                         row += 1
                                     if rank == 3 and count_cortex > 0: #Outer endodermis
-                                        if any(passage_cell_ID==array(j-NwallsJun)) and Barrier==2:
+                                        if any(passage_cell_ID==array(j-n_wall_junction)) and Barrier==2:
                                             row += 2
                                         else:
                                             row += 3
                                     elif rank == 3 and count_stele_overall > 0: #Inner endodermis
-                                        if any(passage_cell_ID==array(j-NwallsJun)) and Barrier==2:
+                                        if any(passage_cell_ID==array(j-n_wall_junction)) and Barrier==2:
                                             row += 1
-                                    Flow = K * (psi - psin + s_membranes[jmb]*(Os_walls[i] - Os_cells[j-NwallsJun]))
+                                    Flow = K * (psi - psin + s_membranes[jmb]*(Os_walls[i] - Os_cells[j-n_wall_junction]))
                                     jmb+=1
-                                    if ((j-NwallsJun not in InterCid) and (j not in listxyl)) or Barrier==0:
+                                    if ((j-n_wall_junction not in geometry.intercellular_ids) and (j not in listxyl)) or Barrier==0:
                                         if Flow > 0 :
                                             UptakeLayer_plus[row][iMaturity][count] += Flow #grouping membrane flow rates in cell layers
                                         else:
@@ -3175,11 +3086,11 @@ def mecha(directory='./MECHA/',     #Project
                                         NWallLayer[row][iMaturity][count] += 1
                 
                 #if C_flag: #Calculates stationary solute concentration
-                if Apo_Contagion==2 or Sym_Contagion==2: #Sym & Apo contagion
-                    if Apo_Contagion==2 and Sym_Contagion==2: #Sym & Apo contagion
+                if general.apo_contagion==2 or general.sym_contagion==2: #Sym & Apo contagion
+                    if general.apo_contagion==2 and general.sym_contagion==2: #Sym & Apo contagion
                         #Solving apoplastic & symplastic concentrations
                         soln_C = np.linalg.solve(matrix_C,rhs_C) #Solving the equation to get apoplastic relative concentrations
-                    elif Apo_Contagion==2:
+                    elif general.apo_contagion==2:
                         #Solving apoplastic concentrations
                         soln_ApoC = np.linalg.solve(matrix_ApoC,rhs_ApoC) #Solving the equation to get apoplastic & symplastic relative concentrations
                     else: # Only Symplastic contagion
@@ -3188,29 +3099,29 @@ def mecha(directory='./MECHA/',     #Project
                     
                     ##Including BC diffusion terms
                     #for wid in listxylwalls:
-                    #    temp=1.0E-04*(lengths[wid]*height)/thickness #Section to length ratio (cm) for the xylem wall
+                    #    temp=1.0E-04*(lengths[wid]*height)/geometry.thickness #Section to length ratio (cm) for the xylem wall
                     #    if not temp==0:
                     #        list_walls_apo_diff.append(wid)
                     #    matrix_C[wid][wid] -= temp*Diff1 #Adding BC diffusion term
                     #    rhs_C[wid][0] -= temp*Diff1*Os_xyl[0][count] #new #Adding BC diffusion term
                     #for wid in Borderwall:
-                    #    if (position[wid][0]>=Xcontact) or (Wall2Cell[wid][0]-NwallsJun in Contact): #Wall (not including junctions) connected to soil
-                    #        temp=1.0E-04*(lengths[wid]/2*height)/(thickness/2)
+                    #    if (position[wid][0]>=Xcontact) or (Wall2Cell[wid][0]-n_wall_junction in hormones.contact): #Wall (not including junctions) connected to soil
+                    #        temp=1.0E-04*(lengths[wid]/2*height)/(geometry.thickness/2)
                     #        if not temp==0:
                     #            list_walls_apo_diff.append(wid)
                     #        matrix_C[wid][wid] -= temp*Diff1 #Adding diffusion BC at soil junction
                     #        rhs_C[wid][0] -= temp*Diff1*Os_soil[0][count] #Adding BC diffusion term
                     #for jid in Borderjunction:
-                    #    if (position[jid][0]>=Xcontact) or (Junction2Wall2Cell[jid-Nwalls][0]-NwallsJun in Contact) or (Junction2Wall2Cell[jid-Nwalls][1]-NwallsJun in Contact) or (Junction2Wall2Cell[jid-Nwalls][2]-NwallsJun in Contact): #Junction connected to soil
-                    #        temp=1.0E-04*(lengths[jid]*height)/(thickness/2)
+                    #    if (position[jid][0]>=Xcontact) or (Junction2Wall2Cell[jid-n_walls][0]-n_wall_junction in hormones.contact) or (Junction2Wall2Cell[jid-n_walls][1]-n_wall_junction in hormones.contact) or (Junction2Wall2Cell[jid-n_walls][2]-n_wall_junction in hormones.contact): #Junction connected to soil
+                    #        temp=1.0E-04*(lengths[jid]*height)/(geometry.thickness/2)
                     #        if not temp==0:
                     #            list_walls_apo_diff.append(jid)
                     #        matrix_C[jid][jid] -= temp*Diff1 #Adding diffusion BC at soil junction
                     #        rhs_C[jid][0] -= temp*Diff1*Os_soil[0][count] #Adding BC diffusion term
                     #
-                    #Nwalls_apo_diff=np.zeros((NwallsJun,2))
-                    #Nwalls_apo_conv=np.zeros((NwallsJun,2))
-                    #Nwalls_TM_conv=np.zeros((NwallsJun,2))
+                    #Nwalls_apo_diff=np.zeros((n_wall_junction,2))
+                    #Nwalls_apo_conv=np.zeros((n_wall_junction,2))
+                    #Nwalls_TM_conv=np.zeros((n_wall_junction,2))
                     #for wid in list_walls_apo_diff:
                     #    Nwalls_apo_diff[wid][1]+=1
                     #    Nwalls_apo_diff[wid][0]=wid
@@ -3226,8 +3137,8 @@ def mecha(directory='./MECHA/',     #Project
                     #soln_C = np.linalg.solve(matrix_C,rhs_C) #Solving the equation to get potentials inside the network
                     
                 #Resets matrix_C and rhs_C to geometrical factor values
-                if Apo_Contagion==2:
-                    if Sym_Contagion==2: # Apo & Sym contagion
+                if general.apo_contagion==2:
+                    if general.sym_contagion==2: # Apo & Sym contagion
                         for i,j,Fjw in Fjw_list:
                             if Fjw>0: #Flow from junction to wall
                                 if i not in Apo_w_Zombies0:
@@ -3252,60 +3163,60 @@ def mecha(directory='./MECHA/',     #Project
                                 if j not in Apo_j_Zombies0:
                                     matrix_ApoC[j][i] += Fjw #Removing convective term
                 
-                if Sym_Contagion==2: #Convection across plasmodesmata
-                    if Apo_Contagion==2: #Apo & Sym Contagion
+                if general.sym_contagion==2: #Convection across plasmodesmata
+                    if general.apo_contagion==2: #Apo & Sym Contagion
                         for i,j,Fcc in Fcc_list:
                             if Fcc>0: #Flow from j to i
-                                if j-NwallsJun not in Sym_Zombie0:
+                                if j-n_wall_junction not in hormones.sym_zombie0:
                                     matrix_C[j][j] += Fcc #Removing convective term
-                                if i-NwallsJun not in Sym_Zombie0:
+                                if i-n_wall_junction not in hormones.sym_zombie0:
                                     matrix_C[i][j] -= Fcc #Removing convective term
                             else: #Flow from i to j
-                                if i-NwallsJun not in Sym_Zombie0:
+                                if i-n_wall_junction not in hormones.sym_zombie0:
                                     matrix_C[i][i] -= Fcc #Removing convective term
-                                if j-NwallsJun not in Sym_Zombie0:
+                                if j-n_wall_junction not in hormones.sym_zombie0:
                                     matrix_C[j][i] += Fcc #Removing convective term
                     else: #Only Sym contagion
                         for i,j,Fcc in Fcc_list:
                             if Fcc>0: #Flow from j to i
-                                if j-NwallsJun not in Sym_Zombie0:
-                                    matrix_SymC[j-NwallsJun][j-NwallsJun] += Fcc #Removing convective term
-                                if ind_o_cell-NwallsJun not in Sym_Zombie0:
-                                    matrix_SymC[i-NwallsJun][j-NwallsJun] -= Fcc #Removing convective term
+                                if j-n_wall_junction not in hormones.sym_zombie0:
+                                    matrix_SymC[j-n_wall_junction][j-n_wall_junction] += Fcc #Removing convective term
+                                if ind_o_cell-n_wall_junction not in hormones.sym_zombie0:
+                                    matrix_SymC[i-n_wall_junction][j-n_wall_junction] -= Fcc #Removing convective term
                             else: #Flow from i to j
-                                if i-NwallsJun not in Sym_Zombie0:
-                                    matrix_SymC[i-NwallsJun][i-NwallsJun] -= Fcc #Removing convective term
-                                if j-NwallsJun not in Sym_Zombie0:
-                                    matrix_SymC[j-NwallsJun][i-NwallsJun] += Fcc #Removing convective term
+                                if i-n_wall_junction not in hormones.sym_zombie0:
+                                    matrix_SymC[i-n_wall_junction][i-n_wall_junction] -= Fcc #Removing convective term
+                                if j-n_wall_junction not in hormones.sym_zombie0:
+                                    matrix_SymC[j-n_wall_junction][i-n_wall_junction] += Fcc #Removing convective term
                 
-                if Apo_Contagion==2 and Sym_Contagion==2:
+                if general.apo_contagion==2 and general.sym_contagion==2:
                     for i,j,Fcw,s in Fcw_list:
                         Fcw=-Fcw #Attention, -Fcw was saved
                         if Fcw>0: #Flow from wall to protoplast
                             if i not in Apo_w_Zombies0:
-                                if D2O1==1:#Solute that moves across membranes like water 
+                                if hormones.d2o1==1:#Solute that moves across membranes like water 
                                     matrix_C[i][i] += Fcw #Removing convective term
                                 else: #Solute that moves across membranes independently of water (the membrane is possibly not one) 
                                     matrix_C[i][i] += Fcw*(1-s) #Removing convective term
-                            if j-NwallsJun not in Sym_Zombie0:
-                                if D2O1==1:#Solute that moves across membranes like water 
+                            if j-n_wall_junction not in hormones.sym_zombie0:
+                                if hormones.d2o1==1:#Solute that moves across membranes like water 
                                     matrix_C[j][i] -= Fcw #Removing convective term
                                 else: #Solute that moves across membranes independently of water (the membrane is possibly not one) 
                                     matrix_C[j][i] -= Fcw*(1-s) #Removing convective term
                         else: #Flow from protoplast to wall
-                            if j-NwallsJun not in Sym_Zombie0:
-                                if D2O1==1:#Solute that moves across membranes like water 
+                            if j-n_wall_junction not in hormones.sym_zombie0:
+                                if hormones.d2o1==1:#Solute that moves across membranes like water 
                                     matrix_C[j][j] -= Fcw #Removing convective term
                                 else: #Solute that moves across membranes independently of water (the membrane is possibly not one) 
                                     matrix_C[j][j] -= Fcw*(1-s) #Removing convective term
                             if i not in Apo_w_Zombies0:
-                                if D2O1==1:#Solute that moves across membranes like water 
+                                if hormones.d2o1==1:#Solute that moves across membranes like water 
                                     matrix_C[i][j] += Fcw #Removing convective term
                                 else: #Solute that moves across membranes independently of water (the membrane is possibly not one) 
                                     matrix_C[i][j] += Fcw*(1-s) #Removing convective term
                 
-                if Apo_Contagion==2:
-                    if Sym_Contagion==2: # Apo & Sym contagion
+                if general.apo_contagion==2:
+                    if general.sym_contagion==2: # Apo & Sym contagion
                         i=0
                         for ind in Borderwall:
                             if ind not in Apo_w_Zombies0:
@@ -3336,53 +3247,50 @@ def mecha(directory='./MECHA/',     #Project
                 
                     ##Removing diffusion terms linked to BC
                     #for jid in Borderjunction:
-                    #    if (position[jid][0]>=Xcontact) or (Junction2Wall2Cell[jid-Nwalls][0]-NwallsJun in Contact) or (Junction2Wall2Cell[jid-Nwalls][1]-NwallsJun in Contact) or (Junction2Wall2Cell[jid-Nwalls][2]-NwallsJun in Contact): #Junction connected to soil
-                    #        temp=1.0E-04*(lengths[jid]*height)/(thickness/2)
+                    #    if (position[jid][0]>=Xcontact) or (Junction2Wall2Cell[jid-n_walls][0]-n_wall_junction in hormones.contact) or (Junction2Wall2Cell[jid-n_walls][1]-n_wall_junction in hormones.contact) or (Junction2Wall2Cell[jid-n_walls][2]-n_wall_junction in hormones.contact): #Junction connected to soil
+                    #        temp=1.0E-04*(lengths[jid]*height)/(geometry.thickness/2)
                     #        matrix_C[jid][jid] += temp*Diff1 #Removing diffusion BC at soil junction
                     #        rhs_C[jid][0] += temp*Diff1*Os_soil[0][count] #Removing BC diffusion term
                     #for wid in Borderwall:
-                    #    if (position[wid][0]>=Xcontact) or (Wall2Cell[wid][0]-NwallsJun in Contact): #Wall (not including junctions) connected to soil
-                    #        temp=1.0E-04*(lengths[wid]/2*height)/(thickness/2)
+                    #    if (position[wid][0]>=Xcontact) or (Wall2Cell[wid][0]-n_wall_junction in hormones.contact): #Wall (not including junctions) connected to soil
+                    #        temp=1.0E-04*(lengths[wid]/2*height)/(geometry.thickness/2)
                     #        matrix_C[wid][wid] += temp*Diff1 #Removing diffusion BC at soil junction
                     #        rhs_C[wid][0] += temp*Diff1*Os_soil[0][count] #Removing BC diffusion term
                     #for wid in listxylwalls:
-                    #    temp=1.0E-04*(lengths[wid]*height)/thickness #Section to length ratio (cm) for the xylem wall
+                    #    temp=1.0E-04*(lengths[wid]*height)/geometry.thickness #Section to length ratio (cm) for the xylem wall
                     #    matrix_C[wid][wid] += temp*Diff1 #Removing BC diffusion term
                     #    rhs_C[wid][0] += temp*Diff1*Os_xyl[0][count] #new #Removing BC diffusion term
                     
                 
                 ####################################
-                ## Creates .vtk file for Paraview ##
+                ## Creates .vtk file for general.paraview ##
                 ####################################
                 
-                if Sym_Contagion==1:
-                    Sym_Zombies=[]
-                    for source in Sym_source_range:
-                        Sym_Zombies.append(int(source.get("id")))
+                if general.sym_contagion==1:
                     iZombie=0
-                    while not iZombie == size(Sym_Zombies):
+                    while not iZombie == size(hormones.sym_zombie0):
                         itemp=0
-                        for cid in Cell_connec[int(Sym_Zombies[iZombie])][0:int(nCell_connec[int(Sym_Zombies[iZombie])])]:
-                            if Cell_connec_flow[int(Sym_Zombies[iZombie])][itemp] == -1 and (cid not in Sym_Zombies): #Infection
-                                if cid in Sym_Immune:
+                        for cid in Cell_connec[int(hormones.sym_zombie0[iZombie])][0:int(nCell_connec[int(hormones.sym_zombie0[iZombie])])]:
+                            if Cell_connec_flow[int(hormones.sym_zombie0[iZombie])][itemp] == -1 and (cid not in hormones.sym_zombie0): #Infection
+                                if cid in hormones.sym_immune:
                                     print(cid,': "You shall not pass!"')
                                 else:
-                                    Sym_Zombies.append(cid)
-                                    print(cid,': "Aaargh!"      Zombie count:', size(Sym_Zombies)+1)
+                                    hormones.sym_zombie0.append(cid)
+                                    print(cid,': "Aaargh!"      Zombie count:', size(hormones.sym_zombie0)+1)
                             itemp+=1
                         iZombie+=1
-                    print('End of the propagation. Survivor count:', Ncells-size(Sym_Zombies)-1)
-                    for cid in Sym_Target:
-                        if cid in Sym_Zombies:
+                    print('End of the propagation. Survivor count:', n_cells-size(hormones.sym_zombie0)-1)
+                    for cid in hormones.sym_target:
+                        if cid in hormones.sym_zombie0:
                             print('Target '+ str(cid) +' down. XXX')
                         else:
                             print('Target '+ str(cid) +' missed!')
-                    if Sym_Target[0] in Sym_Zombies:
-                        if Sym_Target[1] in Sym_Zombies:
+                    if hormones.sym_target[0] in hormones.sym_zombie0:
+                        if hormones.sym_target[1] in hormones.sym_zombie0:
                             Hydropatterning[iMaturity][count]=0 #Both targets reached
                         else:
                             Hydropatterning[iMaturity][count]=1 #Target1 reached only
-                    elif Sym_Target[1] in Sym_Zombies:
+                    elif hormones.sym_target[1] in hormones.sym_zombie0:
                         Hydropatterning[iMaturity][count]=2 #Target2 reached only
                     else:
                         Hydropatterning[iMaturity][count]=-1 #Not target reached
@@ -3399,10 +3307,10 @@ def mecha(directory='./MECHA/',     #Project
                         for ThickWallNode in ThickWalls:
                             myfile.write(str(ThickWallNode[3]) + " " + str(ThickWallNode[4]) + " " + str(height/200) + " \n")
                         myfile.write(" \n")
-                        myfile.write("CELLS " + str(len(Sym_Zombies)) + " " + str(int(len(Sym_Zombies)+sum(nCell2ThickWalls[Sym_Zombies]))) + " \n") #The number of cells corresponds to the number of intercellular spaces
-                        Sym_Contagion_order=zeros((Ncells,1))
+                        myfile.write("CELLS " + str(len(hormones.sym_zombie0)) + " " + str(int(len(hormones.sym_zombie0)+sum(nCell2ThickWalls[hormones.sym_zombie0]))) + " \n") #The number of cells corresponds to the number of intercellular spaces
+                        Sym_Contagion_order=zeros((n_cells,1))
                         temp=0
-                        for cid in Sym_Zombies:
+                        for cid in hormones.sym_zombie0:
                             n=int(nCell2ThickWalls[cid]) #Total number of thick wall nodes around the protoplast
                             Polygon=Cell2ThickWalls[cid][:n]
                             ranking=list()
@@ -3423,20 +3331,20 @@ def mecha(directory='./MECHA/',     #Project
                             Sym_Contagion_order[cid]=temp
                             temp+=1
                         myfile.write(" \n")
-                        myfile.write("CELL_TYPES " + str(len(Sym_Zombies)) + " \n")
-                        for i in range(len(Sym_Zombies)):
+                        myfile.write("CELL_TYPES " + str(len(hormones.sym_zombie0)) + " \n")
+                        for i in range(len(hormones.sym_zombie0)):
                             myfile.write("6 \n") #Triangle-strip cell type
                         myfile.write(" \n")
                         myfile.write("POINT_DATA " + str(len(ThickWalls)) + " \n")
                         myfile.write("SCALARS Sym_Contagion_order_(#) float \n")
                         myfile.write("LOOKUP_TABLE default \n")
                         for ThickWallNode in ThickWalls:
-                            cellnumber1=ThickWallNode[2]-NwallsJun
+                            cellnumber1=ThickWallNode[2]-n_wall_junction
                             myfile.write(str(int(Sym_Contagion_order[int(cellnumber1)])) + " \n") #Flow rate from wall (non junction) to cell    min(sath1,max(satl1,  ))
                     myfile.close()
                     text_file.close()
                     
-                elif Sym_Contagion==2:
+                elif general.sym_contagion==2:
                     text_file = open(newpath+"Sym_Contagion_bottomb"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "w")
                     with open(newpath+"Sym_Contagion_bottomb"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "a") as myfile:
                         myfile.write("# vtk DataFile Version 4.0 \n")
@@ -3448,8 +3356,8 @@ def mecha(directory='./MECHA/',     #Project
                         for ThickWallNode in ThickWalls:
                             myfile.write(str(ThickWallNode[3]) + " " + str(ThickWallNode[4]) + " " + str(height/200) + " \n")
                         myfile.write(" \n")
-                        myfile.write("CELLS " + str(Ncells) + " " + str(int(Ncells+sum(nCell2ThickWalls))) + " \n") #The number of cells corresponds to the number of intercellular spaces
-                        for cid in range(Ncells):
+                        myfile.write("CELLS " + str(n_cells) + " " + str(int(n_cells+sum(nCell2ThickWalls))) + " \n") #The number of cells corresponds to the number of intercellular spaces
+                        for cid in range(n_cells):
                             n=int(nCell2ThickWalls[cid]) #Total number of thick wall nodes around the protoplast
                             Polygon=Cell2ThickWalls[cid][:n]
                             ranking=list()
@@ -3468,65 +3376,65 @@ def mecha(directory='./MECHA/',     #Project
                                 string=string+" "+str(int(id1))
                             myfile.write(string + " \n")
                         myfile.write(" \n")
-                        myfile.write("CELL_TYPES " + str(Ncells) + " \n")
-                        for i in range(Ncells):
+                        myfile.write("CELL_TYPES " + str(n_cells) + " \n")
+                        for i in range(n_cells):
                             myfile.write("6 \n") #Triangle-strip cell type
                         myfile.write(" \n")
                         myfile.write("POINT_DATA " + str(len(ThickWalls)) + " \n")
                         myfile.write("SCALARS Hormone_Symplastic_Relative_Concentration_(-) float \n")
                         myfile.write("LOOKUP_TABLE default \n")
-                        if Apo_Contagion==2:
+                        if general.apo_contagion==2:
                             for ThickWallNode in ThickWalls:
-                                cellnumber1=ThickWallNode[2]-NwallsJun
-                                #print(cellnumber1, soln_C[int(cellnumber1)+NwallsJun])
-                                myfile.write(str(float(soln_C[int(cellnumber1+NwallsJun)])) + " \n")
+                                cellnumber1=ThickWallNode[2]-n_wall_junction
+                                #print(cellnumber1, soln_C[int(cellnumber1)+n_wall_junction])
+                                myfile.write(str(float(soln_C[int(cellnumber1+n_wall_junction)])) + " \n")
                         else:
                             for ThickWallNode in ThickWalls:
-                                cellnumber1=ThickWallNode[2]-NwallsJun
+                                cellnumber1=ThickWallNode[2]-n_wall_junction
                                 #print(cellnumber1, soln_SymC[int(cellnumber1)])
                                 myfile.write(str(float(soln_SymC[int(cellnumber1)])) + " \n") #
                     myfile.close()
                     text_file.close()
                     
                     #text_file = open(newpath+"Contagion"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "w")
-                    ##sath01=max(soln[NwallsJun:NwallsJun+Ncells-1])
-                    ##satl01=min(soln[NwallsJun:NwallsJun+Ncells-1])
+                    ##sath01=max(soln[n_wall_junction:n_wall_junction+n_cells-1])
+                    ##satl01=min(soln[n_wall_junction:n_wall_junction+n_cells-1])
                     #with open(newpath+"Contagion"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "a") as myfile:
                     #    myfile.write("# vtk DataFile Version 4.0 \n")     #("Purchase Amount: %s" % TotalAmount)
                     #    myfile.write("Symplastic hormonal spread by convection \n")
                     #    myfile.write("ASCII \n")
                     #    myfile.write(" \n")
                     #    myfile.write("DATASET UNSTRUCTURED_GRID \n")
-                    #    myfile.write("POINTS "+str(len(G.node))+" float \n")
+                    #    myfile.write("POINTS "+str(len(G.nodes))+" float \n")
                     #    for node in G:
                     #        myfile.write(str(float(position[node][0])) + " " + str(float(position[node][1])) + " " + str(0.0) + " \n")
                     #    myfile.write(" \n")
-                    #    myfile.write("CELLS " + str(Ncells) + " " + str(Ncells*2) + " \n") #
-                    #    for node, edges in G.adjacency_iter():
+                    #    myfile.write("CELLS " + str(n_cells) + " " + str(n_cells*2) + " \n") #
+                    #    for node, edges in G.adjacency():
                     #        i=indice[node]
-                    #        if i>=NwallsJun: #Cell node
+                    #        if i>=n_wall_junction: #Cell node
                     #            myfile.write("1 " + str(i) + " \n")
                     #    myfile.write(" \n")
-                    #    myfile.write("CELL_TYPES " + str(Ncells) + " \n") #
-                    #    for node, edges in G.adjacency_iter():
+                    #    myfile.write("CELL_TYPES " + str(n_cells) + " \n") #
+                    #    for node, edges in G.adjacency():
                     #        i=indice[node]
-                    #        if i>=NwallsJun: #Cell node
+                    #        if i>=n_wall_junction: #Cell node
                     #            myfile.write("1 \n")
                     #    myfile.write(" \n")
-                    #    myfile.write("POINT_DATA " + str(len(G.node)) + " \n")
+                    #    myfile.write("POINT_DATA " + str(len(G.nodes)) + " \n")
                     #    myfile.write("SCALARS Cell_pressure float \n")
                     #    myfile.write("LOOKUP_TABLE default \n")
                     #    for node in G:
-                    #        if node-NwallsJun in [Zombie0]: #Source cell
+                    #        if node-n_wall_junction in [Zombie0]: #Source cell
                     #            myfile.write(str(float(0.0)) + " \n")
-                    #        elif node-NwallsJun in Zombies:
+                    #        elif node-n_wall_junction in Zombies:
                     #            myfile.write(str(float(1.0)) + " \n")
                     #        else:
                     #            myfile.write(str(float(-1.0)) + " \n")
                     #myfile.close()
                     #text_file.close()
                 
-                if Apo_Contagion==1:
+                if general.apo_contagion==1:
                     Apo_w_Zombies=Apo_w_Zombies0
                     iZombie=0
                     while not iZombie == size(Apo_w_Zombies):
@@ -3539,7 +3447,7 @@ def mecha(directory='./MECHA/',     #Project
                                     Apo_w_Zombies.append(id2)
                                     print(id2,': "Aaargh!"      Zombie count:', size(Apo_w_Zombies))
                         iZombie+=1
-                    print('End of the propagation. Survivor count:', NwallsJun-size(Apo_w_Zombies))
+                    print('End of the propagation. Survivor count:', n_wall_junction-size(Apo_w_Zombies))
                     temp=0
                     for wid in Apo_w_Target:
                         if wid in Apo_w_Zombies:
@@ -3561,14 +3469,14 @@ def mecha(directory='./MECHA/',     #Project
                         for ThickWallNodeX in ThickWallsX:
                             myfile.write(str(ThickWallNodeX[1]) + " " + str(ThickWallNodeX[2]) + " 0.0 \n")
                         myfile.write(" \n")
-                        myfile.write("CELLS " + str(int(NwallsJun+Nwalls-len(list_ghostwalls)*2-len(list_ghostjunctions))) + " " + str(int(2*Nwalls*5-len(list_ghostwalls)*10+sum(nWall2NewWallX[Nwalls:])+NwallsJun-Nwalls+2*len(Wall2NewWallX[Nwalls:])-nGhostJunction2Wall-len(list_ghostjunctions))) + " \n") #The number of cells corresponds to the number of lines in ThickWalls (if no ghost wall & junction)
+                        myfile.write("CELLS " + str(int(n_wall_junction+n_walls-len(list_ghostwalls)*2-len(list_ghostjunctions))) + " " + str(int(2*n_walls*5-len(list_ghostwalls)*10+sum(nWall2NewWallX[n_walls:])+n_wall_junction-n_walls+2*len(Wall2NewWallX[n_walls:])-nGhostJunction2Wall-len(list_ghostjunctions))) + " \n") #The number of cells corresponds to the number of lines in ThickWalls (if no ghost wall & junction)
                         i=0
                         for PolygonX in ThickWallPolygonX:
                             if floor(i/2) not in list_ghostwalls:
                                 myfile.write("4 " + str(int(PolygonX[0])) + " " + str(int(PolygonX[1])) + " " + str(int(PolygonX[2])) + " " + str(int(PolygonX[3])) + " \n")
                             i+=1
-                        j=Nwalls
-                        for PolygonX in Wall2NewWallX[Nwalls:]: #"junction" polygons
+                        j=n_walls
+                        for PolygonX in Wall2NewWallX[n_walls:]: #"junction" polygons
                             #Would need to order them based on x or y position to make sure display fully covers the surface (but here we try a simpler not so good solution instead)
                             if j not in list_ghostjunctions:
                                 string=str(int(nWall2NewWallX[j]+2)) #Added +2 so that the first and second nodes could be added again at the end (trying to fill the polygon better)
@@ -3578,14 +3486,14 @@ def mecha(directory='./MECHA/',     #Project
                                 myfile.write(string + " \n")
                             j+=1
                         myfile.write(" \n")
-                        myfile.write("CELL_TYPES " + str(NwallsJun+Nwalls-len(list_ghostwalls)*2-len(list_ghostjunctions)) + " \n")
+                        myfile.write("CELL_TYPES " + str(n_wall_junction+n_walls-len(list_ghostwalls)*2-len(list_ghostjunctions)) + " \n")
                         i=0
                         for PolygonX in ThickWallPolygonX:
                             if floor(i/2) not in list_ghostwalls:
                                 myfile.write("7 \n") #Polygon cell type (wall)
                             i+=1
-                        j=Nwalls
-                        for PolygonX in Wall2NewWallX[Nwalls:]:
+                        j=n_walls
+                        for PolygonX in Wall2NewWallX[n_walls:]:
                             if j not in list_ghostjunctions:
                                 myfile.write("6 \n") #Triangle-strip cell type (wall junction)
                             j+=1
@@ -3593,7 +3501,7 @@ def mecha(directory='./MECHA/',     #Project
                         myfile.write("POINT_DATA " + str(len(ThickWallsX)) + " \n")
                         myfile.write("SCALARS Apo_Contagion_order_(#) float \n")
                         myfile.write("LOOKUP_TABLE default \n")
-                        Apo_Contagion_order=zeros((NwallsJun,1))+int(len(Apo_w_Zombies)*1.6)
+                        Apo_Contagion_order=zeros((n_wall_junction,1))+int(len(Apo_w_Zombies)*1.6)
                         temp=0
                         for wid in Apo_w_Zombies:
                             Apo_Contagion_order[wid]=temp
@@ -3609,7 +3517,7 @@ def mecha(directory='./MECHA/',     #Project
                     myfile.close()
                     text_file.close()
                     
-                elif Apo_Contagion==2:
+                elif general.apo_contagion==2:
                     text_file = open(newpath+"Apo_Contagion_bottomb"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "w")
                     with open(newpath+"Apo_Contagion_bottomb"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "a") as myfile:
                         myfile.write("# vtk DataFile Version 4.0 \n")
@@ -3621,14 +3529,14 @@ def mecha(directory='./MECHA/',     #Project
                         for ThickWallNodeX in ThickWallsX:
                             myfile.write(str(ThickWallNodeX[1]) + " " + str(ThickWallNodeX[2]) + " 0.0 \n")
                         myfile.write(" \n")
-                        myfile.write("CELLS " + str(int(NwallsJun+Nwalls-len(list_ghostwalls)*2-len(list_ghostjunctions))) + " " + str(int(2*Nwalls*5-len(list_ghostwalls)*10+sum(nWall2NewWallX[Nwalls:])+NwallsJun-Nwalls+2*len(Wall2NewWallX[Nwalls:])-nGhostJunction2Wall-len(list_ghostjunctions))) + " \n") #The number of cells corresponds to the number of lines in ThickWalls (if no ghost wall & junction)
+                        myfile.write("CELLS " + str(int(n_wall_junction+n_walls-len(list_ghostwalls)*2-len(list_ghostjunctions))) + " " + str(int(2*n_walls*5-len(list_ghostwalls)*10+sum(nWall2NewWallX[n_walls:])+n_wall_junction-n_walls+2*len(Wall2NewWallX[n_walls:])-nGhostJunction2Wall-len(list_ghostjunctions))) + " \n") #The number of cells corresponds to the number of lines in ThickWalls (if no ghost wall & junction)
                         i=0
                         for PolygonX in ThickWallPolygonX:
                             if floor(i/2) not in list_ghostwalls:
                                 myfile.write("4 " + str(int(PolygonX[0])) + " " + str(int(PolygonX[1])) + " " + str(int(PolygonX[2])) + " " + str(int(PolygonX[3])) + " \n")
                             i+=1
-                        j=Nwalls
-                        for PolygonX in Wall2NewWallX[Nwalls:]: #"junction" polygons
+                        j=n_walls
+                        for PolygonX in Wall2NewWallX[n_walls:]: #"junction" polygons
                             #Would need to order them based on x or y position to make sure display fully covers the surface (but here we try a simpler not so good solution instead)
                             if j not in list_ghostjunctions:
                                 string=str(int(nWall2NewWallX[j]+2)) #Added +2 so that the first and second nodes could be added again at the end (trying to fill the polygon better)
@@ -3638,14 +3546,14 @@ def mecha(directory='./MECHA/',     #Project
                                 myfile.write(string + " \n")
                             j+=1
                         myfile.write(" \n")
-                        myfile.write("CELL_TYPES " + str(NwallsJun+Nwalls-len(list_ghostwalls)*2-len(list_ghostjunctions)) + " \n")
+                        myfile.write("CELL_TYPES " + str(n_wall_junction+n_walls-len(list_ghostwalls)*2-len(list_ghostjunctions)) + " \n")
                         i=0
                         for PolygonX in ThickWallPolygonX:
                             if floor(i/2) not in list_ghostwalls:
                                 myfile.write("7 \n") #Polygon cell type (wall)
                             i+=1
-                        j=Nwalls
-                        for PolygonX in Wall2NewWallX[Nwalls:]:
+                        j=n_walls
+                        for PolygonX in Wall2NewWallX[n_walls:]:
                             if j not in list_ghostjunctions:
                                 myfile.write("6 \n") #Triangle-strip cell type (wall junction)
                             j+=1
@@ -3653,7 +3561,7 @@ def mecha(directory='./MECHA/',     #Project
                         myfile.write("POINT_DATA " + str(len(ThickWallsX)) + " \n")
                         myfile.write("SCALARS Hormone_Symplastic_Relative_Concentration_(-) float \n")
                         myfile.write("LOOKUP_TABLE default \n")
-                        if Sym_Contagion==2:
+                        if general.sym_contagion==2:
                             Newsoln_C=zeros((len(ThickWallsX),1))
                             j=0
                             for PolygonX in Wall2NewWallX:
@@ -3675,23 +3583,23 @@ def mecha(directory='./MECHA/',     #Project
                     text_file.close()
                 
                 
-                if Paraview==1:
-                    if ParaviewWP==1: #2D visualization of walls pressure potentials
+                if general.paraview==1:
+                    if general.paraview_wp==1: #2D visualization of walls pressure potentials
                         text_file = open(newpath+"Walls2Db"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "w")
-                        #sath0=max(soln[0:NwallsJun-1])
-                        #satl0=min(soln[0:NwallsJun-1])
+                        #sath0=max(soln[0:n_wall_junction-1])
+                        #satl0=min(soln[0:n_wall_junction-1])
                         with open(newpath+"Walls2Db"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "a") as myfile:
                             myfile.write("# vtk DataFile Version 4.0 \n")     #("Purchase Amount: %s" % TotalAmount)
                             myfile.write("Wall geometry 2D \n")
                             myfile.write("ASCII \n")
                             myfile.write(" \n")
                             myfile.write("DATASET UNSTRUCTURED_GRID \n")
-                            myfile.write("POINTS "+str(len(G.node))+" float \n")
+                            myfile.write("POINTS "+str(len(G.nodes))+" float \n")
                             for node in G:
                                 myfile.write(str(float(position[node][0])) + " " + str(float(position[node][1])) + " " + str(0.0) + " \n")
                             myfile.write(" \n")
-                            myfile.write("CELLS " + str(Nwalls*2-len(list_ghostwalls)*2) + " " + str(Nwalls*6-len(list_ghostwalls)*6) + " \n") #len(G.node)
-                            for node, edges in G.adjacency_iter():
+                            myfile.write("CELLS " + str(n_walls*2-len(list_ghostwalls)*2) + " " + str(n_walls*6-len(list_ghostwalls)*6) + " \n") #len(G.nodes)
+                            for node, edges in G.adjacency():
                                 i=indice[node]
                                 if i not in list_ghostwalls:
                                     for neighboor, eattr in edges.items(): #Loop on connections (edges)
@@ -3700,8 +3608,8 @@ def mecha(directory='./MECHA/',     #Project
                                             #print(nx.get_node_attributes(edges,'path'))
                                             myfile.write(str(2) + " " + str(i) + " " + str(j) + " \n")
                             myfile.write(" \n")
-                            myfile.write("CELL_TYPES " + str(Nwalls*2-len(list_ghostwalls)*2) + " \n") #The number of nodes corresponds to the number of wall to wall connections.... to be checked, might not be generality
-                            for node, edges in G.adjacency_iter():
+                            myfile.write("CELL_TYPES " + str(n_walls*2-len(list_ghostwalls)*2) + " \n") #The number of nodes corresponds to the number of wall to wall connections.... to be checked, might not be generality
+                            for node, edges in G.adjacency():
                                 i=indice[node]
                                 if i not in list_ghostwalls:
                                     for neighboor, eattr in edges.items(): #Loop on connections (edges)
@@ -3710,7 +3618,7 @@ def mecha(directory='./MECHA/',     #Project
                                             #print(nx.get_node_attributes(edges,'path'))
                                             myfile.write(str(3) + " \n") #Line cell type
                             myfile.write(" \n")
-                            myfile.write("POINT_DATA " + str(len(G.node)) + " \n")
+                            myfile.write("POINT_DATA " + str(len(G.nodes)) + " \n")
                             myfile.write("SCALARS Wall_pressure float \n")
                             myfile.write("LOOKUP_TABLE default \n")
                             for node in G:
@@ -3718,7 +3626,7 @@ def mecha(directory='./MECHA/',     #Project
                         myfile.close()
                         text_file.close()
                     
-                    if ParaviewWP==1 and ParaviewCP: #2D visualization of walls & cells osmotic potentials
+                    if general.paraview_wp==1 and general.paraview_cp: #2D visualization of walls & cells osmotic potentials
                         text_file = open(newpath+"WallsOsAndCellsOs2Db"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "w")
                         with open(newpath+"WallsOsAndCellsOs2Db"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "a") as myfile:
                             myfile.write("# vtk DataFile Version 4.0 \n")     #("Purchase Amount: %s" % TotalAmount)
@@ -3726,12 +3634,12 @@ def mecha(directory='./MECHA/',     #Project
                             myfile.write("ASCII \n")
                             myfile.write(" \n")
                             myfile.write("DATASET UNSTRUCTURED_GRID \n")
-                            myfile.write("POINTS "+str(len(G.node))+" float \n")
+                            myfile.write("POINTS "+str(len(G.nodes))+" float \n")
                             for node in G:
                                 myfile.write(str(float(position[node][0])) + " " + str(float(position[node][1])) + " " + str(0.0) + " \n")
                             myfile.write(" \n")                                     
-                            myfile.write("CELLS " + str(Nwalls*2-len(list_ghostwalls)*2+Ncells) + " " + str(Nwalls*6-len(list_ghostwalls)*6+Ncells*2) + " \n") #
-                            for node, edges in G.adjacency_iter():
+                            myfile.write("CELLS " + str(n_walls*2-len(list_ghostwalls)*2+n_cells) + " " + str(n_walls*6-len(list_ghostwalls)*6+n_cells*2) + " \n") #
+                            for node, edges in G.adjacency():
                                 i=indice[node]
                                 if i not in list_ghostwalls:
                                     for neighboor, eattr in edges.items(): #Loop on connections (edges)
@@ -3739,11 +3647,11 @@ def mecha(directory='./MECHA/',     #Project
                                         if j>i and eattr['path']=='wall':
                                             #print(nx.get_node_attributes(edges,'path'))
                                             myfile.write(str(2) + " " + str(i) + " " + str(j) + " \n")
-                                if i>=NwallsJun: #Cell node
+                                if i>=n_wall_junction: #Cell node
                                     myfile.write("1 " + str(i) + " \n")
                             myfile.write(" \n")
-                            myfile.write("CELL_TYPES " + str(Nwalls*2-len(list_ghostwalls)*2+Ncells) + " \n") #
-                            for node, edges in G.adjacency_iter():
+                            myfile.write("CELL_TYPES " + str(n_walls*2-len(list_ghostwalls)*2+n_cells) + " \n") #
+                            for node, edges in G.adjacency():
                                 i=indice[node]
                                 if i not in list_ghostwalls:
                                     for neighboor, eattr in edges.items(): #Loop on connections (edges)
@@ -3751,26 +3659,26 @@ def mecha(directory='./MECHA/',     #Project
                                         if j>i and eattr['path']=='wall':
                                             #print(nx.get_node_attributes(edges,'path'))
                                             myfile.write(str(3) + " \n") #Line cell type
-                                if i>=NwallsJun: #Cell node
+                                if i>=n_wall_junction: #Cell node
                                     myfile.write("1 \n")
                             myfile.write(" \n")
-                            myfile.write("POINT_DATA " + str(len(G.node)) + " \n")
+                            myfile.write("POINT_DATA " + str(len(G.nodes)) + " \n")
                             myfile.write("SCALARS Wall_and_Cell_osmotic_pot float \n")
                             myfile.write("LOOKUP_TABLE default \n")
-                            for node, edges in G.adjacency_iter():
+                            for node, edges in G.adjacency():
                                 i=indice[node] #Node ID number
-                                if i<Nwalls: #Wall node
+                                if i<n_walls: #Wall node
                                     myfile.write(str(float(Os_walls[i])) + " \n")
-                                elif i<NwallsJun: #Junction node
+                                elif i<n_wall_junction: #Junction node
                                     myfile.write(str(float(0.0)) + " \n")
                                 else: #Cell node
-                                    myfile.write(str(float(Os_cells[i-NwallsJun])) + " \n")
+                                    myfile.write(str(float(Os_cells[i-n_wall_junction])) + " \n")
                         myfile.close()
                         text_file.close()
                         
     
                     
-                    if ParaviewWP==1 and ParaviewCP==1: #2D visualization of walls & cells water potentials
+                    if general.paraview_wp==1 and general.paraview_cp==1: #2D visualization of walls & cells water potentials
                         text_file = open(newpath+"WallsAndCells2Db"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "w")
                         with open(newpath+"WallsAndCells2Db"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "a") as myfile:
                             myfile.write("# vtk DataFile Version 4.0 \n")     #("Purchase Amount: %s" % TotalAmount)
@@ -3778,12 +3686,12 @@ def mecha(directory='./MECHA/',     #Project
                             myfile.write("ASCII \n")
                             myfile.write(" \n")
                             myfile.write("DATASET UNSTRUCTURED_GRID \n")
-                            myfile.write("POINTS "+str(len(G.node))+" float \n")
+                            myfile.write("POINTS "+str(len(G.nodes))+" float \n")
                             for node in G:
                                 myfile.write(str(float(position[node][0])) + " " + str(float(position[node][1])) + " " + str(0.0) + " \n")
                             myfile.write(" \n")
-                            myfile.write("CELLS " + str(Nwalls*2-len(list_ghostwalls)*2+Ncells) + " " + str(Nwalls*6-len(list_ghostwalls)*6+Ncells*2) + " \n") #
-                            for node, edges in G.adjacency_iter():
+                            myfile.write("CELLS " + str(n_walls*2-len(list_ghostwalls)*2+n_cells) + " " + str(n_walls*6-len(list_ghostwalls)*6+n_cells*2) + " \n") #
+                            for node, edges in G.adjacency():
                                 i=indice[node]
                                 if i not in list_ghostwalls:
                                     for neighboor, eattr in edges.items(): #Loop on connections (edges)
@@ -3791,11 +3699,11 @@ def mecha(directory='./MECHA/',     #Project
                                         if j>i and eattr['path']=='wall':
                                             #print(nx.get_node_attributes(edges,'path'))
                                             myfile.write(str(2) + " " + str(i) + " " + str(j) + " \n")
-                                if i>=NwallsJun: #Cell node
+                                if i>=n_wall_junction: #Cell node
                                     myfile.write("1 " + str(i) + " \n")
                             myfile.write(" \n")
-                            myfile.write("CELL_TYPES " + str(Nwalls*2-len(list_ghostwalls)*2+Ncells) + " \n") #
-                            for node, edges in G.adjacency_iter():
+                            myfile.write("CELL_TYPES " + str(n_walls*2-len(list_ghostwalls)*2+n_cells) + " \n") #
+                            for node, edges in G.adjacency():
                                 i=indice[node]
                                 if i not in list_ghostwalls:
                                     for neighboor, eattr in edges.items(): #Loop on connections (edges)
@@ -3803,10 +3711,10 @@ def mecha(directory='./MECHA/',     #Project
                                         if j>i and eattr['path']=='wall':
                                             #print(nx.get_node_attributes(edges,'path'))
                                             myfile.write(str(3) + " \n") #Line cell type
-                                if i>=NwallsJun: #Cell node
+                                if i>=n_wall_junction: #Cell node
                                     myfile.write("1 \n")
                             myfile.write(" \n")
-                            myfile.write("POINT_DATA " + str(len(G.node)) + " \n")
+                            myfile.write("POINT_DATA " + str(len(G.nodes)) + " \n")
                             myfile.write("SCALARS pressure float \n")
                             myfile.write("LOOKUP_TABLE default \n")
                             for node in G:
@@ -3814,33 +3722,33 @@ def mecha(directory='./MECHA/',     #Project
                         myfile.close()
                         text_file.close()
                     
-                    if ParaviewCP==1: #2D visualization of cells water potentials
+                    if general.paraview_cp==1: #2D visualization of cells water potentials
                         text_file = open(newpath+"Cells2Db"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "w")
-                        #sath01=max(soln[NwallsJun:NwallsJun+Ncells-1])
-                        #satl01=min(soln[NwallsJun:NwallsJun+Ncells-1])
+                        #sath01=max(soln[n_wall_junction:n_wall_junction+n_cells-1])
+                        #satl01=min(soln[n_wall_junction:n_wall_junction+n_cells-1])
                         with open(newpath+"Cells2Db"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "a") as myfile:
                             myfile.write("# vtk DataFile Version 4.0 \n")     #("Purchase Amount: %s" % TotalAmount)
                             myfile.write("Pressure potential distribution in cells 2D \n")
                             myfile.write("ASCII \n")
                             myfile.write(" \n")
                             myfile.write("DATASET UNSTRUCTURED_GRID \n")
-                            myfile.write("POINTS "+str(len(G.node))+" float \n")
+                            myfile.write("POINTS "+str(len(G.nodes))+" float \n")
                             for node in G:
                                 myfile.write(str(float(position[node][0])) + " " + str(float(position[node][1])) + " " + str(0.0) + " \n")
                             myfile.write(" \n")
-                            myfile.write("CELLS " + str(Ncells) + " " + str(Ncells*2) + " \n") #
-                            for node, edges in G.adjacency_iter():
+                            myfile.write("CELLS " + str(n_cells) + " " + str(n_cells*2) + " \n") #
+                            for node, edges in G.adjacency():
                                 i=indice[node]
-                                if i>=NwallsJun: #Cell node
+                                if i>=n_wall_junction: #Cell node
                                     myfile.write("1 " + str(i) + " \n")
                             myfile.write(" \n")
-                            myfile.write("CELL_TYPES " + str(Ncells) + " \n") #
-                            for node, edges in G.adjacency_iter():
+                            myfile.write("CELL_TYPES " + str(n_cells) + " \n") #
+                            for node, edges in G.adjacency():
                                 i=indice[node]
-                                if i>=NwallsJun: #Cell node
+                                if i>=n_wall_junction: #Cell node
                                     myfile.write("1 \n")
                             myfile.write(" \n")
-                            myfile.write("POINT_DATA " + str(len(G.node)) + " \n")
+                            myfile.write("POINT_DATA " + str(len(G.nodes)) + " \n")
                             myfile.write("SCALARS Cell_pressure float \n")
                             myfile.write("LOOKUP_TABLE default \n")
                             for node in G:
@@ -3849,10 +3757,10 @@ def mecha(directory='./MECHA/',     #Project
                         text_file.close()
                         
                     
-                    if ParaviewMF==1: #3D visualization of membrane fluxes
+                    if general.paraview_mf==1: #3D visualization of membrane fluxes
                         text_file = open(newpath+"Membranes3Db"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "w")
-                        #sath1=max(MembraneFlowDensity)*color_threshold
-                        #satl1=min(MembraneFlowDensity)*color_threshold
+                        #sath1=max(MembraneFlowDensity)*general.color_threshold
+                        #satl1=min(MembraneFlowDensity)*general.color_threshold
                         #if satl1<-sath1: #min(MembraneFlowDensity)<0:
                         #    sath1=-satl1
                         #else:
@@ -3871,15 +3779,15 @@ def mecha(directory='./MECHA/',     #Project
                             myfile.write(" \n")
                             myfile.write("CELLS " + str(len(ThickWalls)-len(list_ghostwalls)*4) + " " + str(len(ThickWalls)*5-len(list_ghostwalls)*20) + " \n") #The number of cells corresponds to the number of lines in ThickWalls
                             for ThickWallNode in ThickWalls:
-                                if ThickWallNode[1]>=Nwalls: #wall that is a junction
+                                if ThickWallNode[1]>=n_walls: #wall that is a junction
                                     if ThickWalls[int(ThickWallNode[5])][1] not in list_ghostwalls:
-                                        myfile.write("4 " + str(int(ThickWallNode[0])) + " " + str(int(ThickWallNode[5])) + " " + str(int(ThickWallNode[5])+len(ThickWalls)) + " " + str(int(ThickWallNode[0])+len(ThickWalls)) + " \n") #All points were repeated twice (once at z=0 and once at z=height), so adding len(ThickWalls) is the same point at z=height
+                                        myfile.write("4 " + str(int(ThickWallNode[0])) + " " + str(int(ThickWallNode[5])) + " " + str(int(ThickWallNode[5])+len(ThickWalls)) + " " + str(int(ThickWallNode[0])+len(ThickWalls)) + " \n") #All cellset['points'] were repeated twice (once at z=0 and once at z=height), so adding len(ThickWalls) is the same point at z=height
                                     if ThickWalls[int(ThickWallNode[6])][1] not in list_ghostwalls:
                                         myfile.write("4 " + str(int(ThickWallNode[0])) + " " + str(int(ThickWallNode[6])) + " " + str(int(ThickWallNode[6])+len(ThickWalls)) + " " + str(int(ThickWallNode[0])+len(ThickWalls)) + " \n")
                             myfile.write(" \n")
                             myfile.write("CELL_TYPES " + str(len(ThickWalls)-len(list_ghostwalls)*4) + " \n")
                             for ThickWallNode in ThickWalls:
-                                if ThickWallNode[1]>=Nwalls: #wall that is a junction
+                                if ThickWallNode[1]>=n_walls: #wall that is a junction
                                     if ThickWalls[int(ThickWallNode[5])][1] not in list_ghostwalls:
                                         myfile.write("9 \n") #Quad cell type
                                     if ThickWalls[int(ThickWallNode[6])][1] not in list_ghostwalls:
@@ -3901,16 +3809,16 @@ def mecha(directory='./MECHA/',     #Project
                         myfile.close()
                         text_file.close()
                     
-                    if ParaviewWF==1: #Wall flow density data
+                    if general.paraview_wf==1: #Wall flow density data
                         maxWallFlowDensity=0.0
                         for ir in range(int(len(WallFlowDensity))):
                             maxWallFlowDensity=max(maxWallFlowDensity,abs(WallFlowDensity[ir][2]))
-                        sath2=maxWallFlowDensity*color_threshold #(1-(1-color_threshold)/2)
+                        sath2=maxWallFlowDensity*general.color_threshold #(1-(1-general.color_threshold)/2)
                         #satl2=0.0
                         text_file = open(newpath+"WallsThick3D_bottomb"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "w")
                         with open(newpath+"WallsThick3D_bottomb"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "a") as myfile:
                             myfile.write("# vtk DataFile Version 4.0 \n")
-                            myfile.write("Wall geometry 3D including thickness bottom \n")
+                            myfile.write("Wall geometry 3D including geometry.thickness bottom \n")
                             myfile.write("ASCII \n")
                             myfile.write(" \n")
                             myfile.write("DATASET UNSTRUCTURED_GRID \n")
@@ -3918,14 +3826,14 @@ def mecha(directory='./MECHA/',     #Project
                             for ThickWallNodeX in ThickWallsX:
                                 myfile.write(str(ThickWallNodeX[1]) + " " + str(ThickWallNodeX[2]) + " 0.0 \n")
                             myfile.write(" \n")
-                            myfile.write("CELLS " + str(int(NwallsJun+Nwalls-len(list_ghostwalls)*2-len(list_ghostjunctions))) + " " + str(int(2*Nwalls*5-len(list_ghostwalls)*10+sum(nWall2NewWallX[Nwalls:])+NwallsJun-Nwalls+2*len(Wall2NewWallX[Nwalls:])-nGhostJunction2Wall-len(list_ghostjunctions))) + " \n") #The number of cells corresponds to the number of lines in ThickWalls (if no ghost wall & junction)
+                            myfile.write("CELLS " + str(int(n_wall_junction+n_walls-len(list_ghostwalls)*2-len(list_ghostjunctions))) + " " + str(int(2*n_walls*5-len(list_ghostwalls)*10+sum(nWall2NewWallX[n_walls:])+n_wall_junction-n_walls+2*len(Wall2NewWallX[n_walls:])-nGhostJunction2Wall-len(list_ghostjunctions))) + " \n") #The number of cells corresponds to the number of lines in ThickWalls (if no ghost wall & junction)
                             i=0
                             for PolygonX in ThickWallPolygonX:
                                 if floor(i/2) not in list_ghostwalls:
                                     myfile.write("4 " + str(int(PolygonX[0])) + " " + str(int(PolygonX[1])) + " " + str(int(PolygonX[2])) + " " + str(int(PolygonX[3])) + " \n")
                                 i+=1
-                            j=Nwalls
-                            for PolygonX in Wall2NewWallX[Nwalls:]: #"junction" polygons
+                            j=n_walls
+                            for PolygonX in Wall2NewWallX[n_walls:]: #"junction" polygons
                                 #Would need to order them based on x or y position to make sure display fully covers the surface (but here we try a simpler not so good solution instead)
                                 if j not in list_ghostjunctions:
                                     string=str(int(nWall2NewWallX[j]+2)) #Added +2 so that the first and second nodes could be added again at the end (trying to fill the polygon better)
@@ -3935,14 +3843,14 @@ def mecha(directory='./MECHA/',     #Project
                                     myfile.write(string + " \n")
                                 j+=1
                             myfile.write(" \n")
-                            myfile.write("CELL_TYPES " + str(NwallsJun+Nwalls-len(list_ghostwalls)*2-len(list_ghostjunctions)) + " \n")
+                            myfile.write("CELL_TYPES " + str(n_wall_junction+n_walls-len(list_ghostwalls)*2-len(list_ghostjunctions)) + " \n")
                             i=0
                             for PolygonX in ThickWallPolygonX:
                                 if floor(i/2) not in list_ghostwalls:
                                     myfile.write("7 \n") #Polygon cell type (wall)
                                 i+=1
-                            j=Nwalls
-                            for PolygonX in Wall2NewWallX[Nwalls:]:
+                            j=n_walls
+                            for PolygonX in Wall2NewWallX[n_walls:]:
                                 if j not in list_ghostjunctions:
                                     myfile.write("6 \n") #Triangle-strip cell type (wall junction)
                                 j+=1
@@ -3966,7 +3874,7 @@ def mecha(directory='./MECHA/',     #Project
                         text_file = open(newpath+"WallsThick3Dcos_bottomb"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "w")
                         with open(newpath+"WallsThick3Dcos_bottomb"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "a") as myfile:
                             myfile.write("# vtk DataFile Version 4.0 \n")
-                            myfile.write("Wall geometry 3D including thickness bottom \n")
+                            myfile.write("Wall geometry 3D including geometry.thickness bottom \n")
                             myfile.write("ASCII \n")
                             myfile.write(" \n")
                             myfile.write("DATASET UNSTRUCTURED_GRID \n")
@@ -3974,14 +3882,14 @@ def mecha(directory='./MECHA/',     #Project
                             for ThickWallNodeX in ThickWallsX:
                                 myfile.write(str(ThickWallNodeX[1]) + " " + str(ThickWallNodeX[2]) + " 0.0 \n")
                             myfile.write(" \n")
-                            myfile.write("CELLS " + str(int(NwallsJun+Nwalls-len(list_ghostwalls)*2-len(list_ghostjunctions))) + " " + str(int(2*Nwalls*5-len(list_ghostwalls)*10+sum(nWall2NewWallX[Nwalls:])+NwallsJun-Nwalls+2*len(Wall2NewWallX[Nwalls:])-nGhostJunction2Wall-len(list_ghostjunctions))) + " \n") #The number of cells corresponds to the number of lines in ThickWalls (if no ghost wall & junction)
+                            myfile.write("CELLS " + str(int(n_wall_junction+n_walls-len(list_ghostwalls)*2-len(list_ghostjunctions))) + " " + str(int(2*n_walls*5-len(list_ghostwalls)*10+sum(nWall2NewWallX[n_walls:])+n_wall_junction-n_walls+2*len(Wall2NewWallX[n_walls:])-nGhostJunction2Wall-len(list_ghostjunctions))) + " \n") #The number of cells corresponds to the number of lines in ThickWalls (if no ghost wall & junction)
                             i=0
                             for PolygonX in ThickWallPolygonX:
                                 if floor(i/2) not in list_ghostwalls:
                                     myfile.write("4 " + str(int(PolygonX[0])) + " " + str(int(PolygonX[1])) + " " + str(int(PolygonX[2])) + " " + str(int(PolygonX[3])) + " \n")
                                 i+=1
-                            j=Nwalls
-                            for PolygonX in Wall2NewWallX[Nwalls:]: #"junction" polygons
+                            j=n_walls
+                            for PolygonX in Wall2NewWallX[n_walls:]: #"junction" polygons
                                 #Would need to order them based on x or y position to make sure display fully covers the surface (but here we try a simpler not so good solution instead)
                                 if j not in list_ghostjunctions:
                                     string=str(int(nWall2NewWallX[j]+2)) #Added +2 so that the first and second nodes could be added again at the end (trying to fill the polygon better)
@@ -3991,14 +3899,14 @@ def mecha(directory='./MECHA/',     #Project
                                     myfile.write(string + " \n")
                                 j+=1
                             myfile.write(" \n")
-                            myfile.write("CELL_TYPES " + str(NwallsJun+Nwalls-len(list_ghostwalls)*2-len(list_ghostjunctions)) + " \n")
+                            myfile.write("CELL_TYPES " + str(n_wall_junction+n_walls-len(list_ghostwalls)*2-len(list_ghostjunctions)) + " \n")
                             i=0
                             for PolygonX in ThickWallPolygonX:
                                 if floor(i/2) not in list_ghostwalls:
                                     myfile.write("7 \n") #Polygon cell type (wall)
                                 i+=1
-                            j=Nwalls
-                            for PolygonX in Wall2NewWallX[Nwalls:]:
+                            j=n_walls
+                            for PolygonX in Wall2NewWallX[n_walls:]:
                                 if j not in list_ghostjunctions:
                                     myfile.write("6 \n") #Triangle-strip cell type (wall junction)
                                 j+=1
@@ -4033,9 +3941,9 @@ def mecha(directory='./MECHA/',     #Project
                                 for ThickWallNode in ThickWalls:
                                     myfile.write(str(ThickWallNode[3]) + " " + str(ThickWallNode[4]) + " " + str(height/200) + " \n")
                                 myfile.write(" \n")
-                                myfile.write("CELLS " + str(len(InterCid)) + " " + str(int(len(InterCid)+sum(nCell2ThickWalls[InterCid]))) + " \n") #The number of cells corresponds to the number of intercellular spaces
-                                InterCFlowDensity=zeros((Ncells,1))
-                                for cid in InterCid:
+                                myfile.write("CELLS " + str(len(geometry.intercellular_ids)) + " " + str(int(len(geometry.intercellular_ids)+sum(nCell2ThickWalls[geometry.intercellular_ids]))) + " \n") #The number of cells corresponds to the number of intercellular spaces
+                                InterCFlowDensity=zeros((n_cells,1))
+                                for cid in geometry.intercellular_ids:
                                     n=int(nCell2ThickWalls[cid]) #Total number of thick wall nodes around the protoplast
                                     Polygon=Cell2ThickWalls[cid][:n]
                                     ranking=list()
@@ -4056,25 +3964,25 @@ def mecha(directory='./MECHA/',     #Project
                                     for twpid in Polygon[:int(n/2)]: #The first half of nodes are wall nodes actually connected to cells
                                         InterCFlowDensity[cid]+=abs(MembraneFlowDensity[int(twpid)])/n #Mean absolute flow density calculation
                                 myfile.write(" \n")
-                                myfile.write("CELL_TYPES " + str(len(InterCid)) + " \n")
-                                for i in range(len(InterCid)):
+                                myfile.write("CELL_TYPES " + str(len(geometry.intercellular_ids)) + " \n")
+                                for i in range(len(geometry.intercellular_ids)):
                                     myfile.write("6 \n") #Triangle-strip cell type
                                 myfile.write(" \n")
                                 myfile.write("POINT_DATA " + str(len(ThickWalls)) + " \n")
                                 myfile.write("SCALARS Apo_flux_(m/s) float \n")
                                 myfile.write("LOOKUP_TABLE default \n")
                                 for ThickWallNode in ThickWalls:
-                                    cellnumber1=ThickWallNode[2]-NwallsJun
+                                    cellnumber1=ThickWallNode[2]-n_wall_junction
                                     myfile.write(str(float(InterCFlowDensity[int(cellnumber1)])/sperd/cmperm) + " \n") #Flow rate from wall (non junction) to cell    min(sath1,max(satl1,  ))
                             myfile.close()
                             text_file.close()
                     
                     
                     
-                    if ParaviewPF==1: #Plasmodesmata flow density data disks
+                    if general.paraview_pf==1: #Plasmodesmata flow density data disks
                         text_file = open(newpath+"Plasmodesm3Db"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "w")
-                        #sath3=max(PlasmodesmFlowDensity)*color_threshold
-                        #satl3=min(PlasmodesmFlowDensity)*color_threshold
+                        #sath3=max(PlasmodesmFlowDensity)*general.color_threshold
+                        #satl3=min(PlasmodesmFlowDensity)*general.color_threshold
                         #if satl3<-sath3: #min(PlasmodesmFlowDensity)<0:
                         #    sath3=-satl3
                         #else:
@@ -4087,8 +3995,8 @@ def mecha(directory='./MECHA/',     #Project
                             myfile.write("DATASET UNSTRUCTURED_GRID \n")
                             myfile.write("POINTS "+str(len(PlasmodesmFlowDensity)*12)+" float \n")
                             for ThickWallNode in ThickWalls:
-                                if ThickWallNode[1]<Nwalls: #selection of new walls (not new junctions)
-                                    if ThickWallNode[7]==0: #new walls that are not at the interface with soil or xylem, where there is no plasmodesmata   #if G.node[int(ThickWallNode[1])]['borderlink']==0
+                                if ThickWallNode[1]<n_walls: #selection of new walls (not new junctions)
+                                    if ThickWallNode[7]==0: #new walls that are not at the interface with soil or xylem, where there is no plasmodesmata   #if G.nodes[int(ThickWallNode[1])]['borderlink']==0
                                         #calculate the XY slope between the two neighbouring new junctions
                                         twpid1=int(ThickWallNode[5])
                                         twpid2=int(ThickWallNode[6])
@@ -4098,7 +4006,7 @@ def mecha(directory='./MECHA/',     #Project
                                             slopeNJ=inf
                                         x0=ThickWallNode[3]
                                         y0=ThickWallNode[4]
-                                        z0=radiusPlasmodesm_disp*3
+                                        z0=general.radius_plasmodesm_disp*3
                                         #Calculate the horizontal distance between XY0 and the cell center, compare it with the distance between the mean position of the new junctions. If the latter is closer to the cell center, it becomes the new XY0 to make sur the disk is visible
                                         xC=position[int(ThickWallNode[2])][0]
                                         yC=position[int(ThickWallNode[2])][1]
@@ -4108,9 +4016,9 @@ def mecha(directory='./MECHA/',     #Project
                                             x0=xNJ
                                             y0=yNJ
                                         for i in range(12):
-                                            x=x0+cos(arctan(slopeNJ))*radiusPlasmodesm_disp*cos(int(i)*pi/6.0)
-                                            y=y0+sin(arctan(slopeNJ))*radiusPlasmodesm_disp*cos(int(i)*pi/6.0)
-                                            z=z0+radiusPlasmodesm_disp*sin(int(i)*pi/6.0)
+                                            x=x0+cos(arctan(slopeNJ))*general.radius_plasmodesm_disp*cos(int(i)*pi/6.0)
+                                            y=y0+sin(arctan(slopeNJ))*general.radius_plasmodesm_disp*cos(int(i)*pi/6.0)
+                                            z=z0+general.radius_plasmodesm_disp*sin(int(i)*pi/6.0)
                                             myfile.write(str(x) + " " + str(y) + " " + str(z) + " \n")
                                 else:
                                     break #interrupts the for loop in case we reached the new junction nodes
@@ -4136,7 +4044,7 @@ def mecha(directory='./MECHA/',     #Project
                         text_file.close()
                     
                     
-                    if ParaviewMF==1 and ParaviewPF==1: #Membranes and plasmodesms in the same file
+                    if general.paraview_mf==1 and general.paraview_pf==1: #Membranes and plasmodesms in the same file
                         text_file = open(newpath+"Membranes_n_plasmodesm3Db"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "w")
                         with open(newpath+"Membranes_n_plasmodesm3Db"+str(Barrier)+","+str(iMaturity)+"s"+str(count)+".pvtk", "a") as myfile:
                             myfile.write("# vtk DataFile Version 4.0 \n")
@@ -4150,8 +4058,8 @@ def mecha(directory='./MECHA/',     #Project
                             for ThickWallNode in ThickWalls:
                                 myfile.write(str(ThickWallNode[3]) + " " + str(ThickWallNode[4]) + " " + str(height) + " \n")
                             for ThickWallNode in ThickWalls:
-                                if ThickWallNode[1]<Nwalls: #selection of new walls (not new junctions)
-                                    if ThickWallNode[7]==0: #new walls that are not at the interface with soil or xylem, where there is no plasmodesmata   #if G.node[int(ThickWallNode[1])]['borderlink']==0
+                                if ThickWallNode[1]<n_walls: #selection of new walls (not new junctions)
+                                    if ThickWallNode[7]==0: #new walls that are not at the interface with soil or xylem, where there is no plasmodesmata   #if G.nodes[int(ThickWallNode[1])]['borderlink']==0
                                         #calculate the XY slope between the two neighbouring new junctions
                                         twpid1=int(ThickWallNode[5])
                                         twpid2=int(ThickWallNode[6])
@@ -4161,7 +4069,7 @@ def mecha(directory='./MECHA/',     #Project
                                             slopeNJ=inf
                                         x0=ThickWallNode[3]
                                         y0=ThickWallNode[4]
-                                        z0=radiusPlasmodesm_disp*3
+                                        z0=general.radius_plasmodesm_disp*3
                                         #Calculate the horizontal distance between XY0 and the cell center, compare it with the distance between the mean position of the new junctions. If the latter is closer to the cell center, it becomes the new XY0 to make sur the disk is visible
                                         xC=position[int(ThickWallNode[2])][0]
                                         yC=position[int(ThickWallNode[2])][1]
@@ -4171,16 +4079,16 @@ def mecha(directory='./MECHA/',     #Project
                                             x0=xNJ
                                             y0=yNJ
                                         for i in range(12):
-                                            x=x0+cos(arctan(slopeNJ))*radiusPlasmodesm_disp*cos(int(i)*pi/6.0)
-                                            y=y0+sin(arctan(slopeNJ))*radiusPlasmodesm_disp*cos(int(i)*pi/6.0)
-                                            z=z0+radiusPlasmodesm_disp*sin(int(i)*pi/6.0)
+                                            x=x0+cos(arctan(slopeNJ))*general.radius_plasmodesm_disp*cos(int(i)*pi/6.0)
+                                            y=y0+sin(arctan(slopeNJ))*general.radius_plasmodesm_disp*cos(int(i)*pi/6.0)
+                                            z=z0+general.radius_plasmodesm_disp*sin(int(i)*pi/6.0)
                                             myfile.write(str(x) + " " + str(y) + " " + str(z) + " \n")
                                 else:
                                     break #interrupts the for loop in case we reached the new junction nodes
                             myfile.write(" \n")
                             myfile.write("CELLS " + str(len(ThickWalls)-len(list_ghostwalls)*4+len(PlasmodesmFlowDensity)) + " " + str(len(ThickWalls)*5-len(list_ghostwalls)*20+len(PlasmodesmFlowDensity)*13) + " \n") #The number of cells corresponds to the number of lines in ThickWalls
                             for ThickWallNode in ThickWalls:
-                                if ThickWallNode[1]>=Nwalls: #wall that is a junction
+                                if ThickWallNode[1]>=n_walls: #wall that is a junction
                                     if ThickWalls[int(ThickWallNode[5])][1] not in list_ghostwalls:
                                         myfile.write("4 " + str(int(ThickWallNode[0])) + " " + str(int(ThickWallNode[5])) + " " + str(int(ThickWallNode[5])+len(ThickWalls)) + " " + str(int(ThickWallNode[0])+len(ThickWalls)) + " \n")
                                     if ThickWalls[int(ThickWallNode[6])][1] not in list_ghostwalls:
@@ -4193,7 +4101,7 @@ def mecha(directory='./MECHA/',     #Project
                             myfile.write(" \n")
                             myfile.write("CELL_TYPES " + str(len(ThickWalls)-len(list_ghostwalls)*4+len(PlasmodesmFlowDensity)) + " \n")
                             for ThickWallNode in ThickWalls:
-                                if ThickWallNode[1]>=Nwalls: #wall that is a junction
+                                if ThickWallNode[1]>=n_walls: #wall that is a junction
                                     if ThickWalls[int(ThickWallNode[5])][1] not in list_ghostwalls:
                                         myfile.write("9 \n") #Quad cell type
                                     if ThickWalls[int(ThickWallNode[6])][1] not in list_ghostwalls:
@@ -4224,7 +4132,7 @@ def mecha(directory='./MECHA/',     #Project
         #write down kr_tot and Uptake distributions in matrices
         iMaturity=-1
         kr_tot_saved = []
-        for Maturity in Maturityrange:
+        for Maturity in geometry.maturity_elems:
             Barrier=int(Maturity.get("Barrier"))
             height=int(Maturity.get("height")) #(microns)
             iMaturity+=1
@@ -4237,7 +4145,7 @@ def mecha(directory='./MECHA/',     #Project
                 myfile.write("\n")
                 myfile.write("Cross-section height: "+str(height*1.0E-04)+" cm \n")
                 myfile.write("\n")
-                myfile.write("Cross-section perimeter: "+str(perimeter[0])+" cm \n")
+                myfile.write("Cross-section perimeter: "+str(perimeter)+" cm \n")
                 myfile.write("\n")
                 myfile.write("Xylem specific axial conductance: "+str(K_xyl_spec)+" cm^4/hPa/d \n")
                 myfile.write("\n")
@@ -4249,14 +4157,14 @@ def mecha(directory='./MECHA/',     #Project
                 myfile.write("\n")
                 myfile.write("Radial distance from stele centre (microns): \n")
                 for j in Layer_dist2:
-                    myfile.write(str(float(j))+" \n")
+                    myfile.write(str(float(j.item()))+" \n")
                 myfile.write("\n")
                 myfile.write("Standard Transmembrane uptake Fractions (%): \n")
-                for j in range(int(r_discret[0])):
+                for j in range(int(r_discret[0][0])):
                     myfile.write(str(STFlayer_plus[j][iMaturity]*100)+" \n")
                 myfile.write("\n")
                 myfile.write("Standard Transmembrane release Fractions (%): \n")
-                for j in range(int(r_discret[0])):
+                for j in range(int(r_discret[0][0])):
                     myfile.write(str(STFlayer_minus[j][iMaturity]*100)+" \n")
                 for i in range(1,Nscenarios):
                     myfile.write("\n")
@@ -4304,51 +4212,51 @@ def mecha(directory='./MECHA/',     #Project
                     myfile.write("q_tot: "+str(Q_tot[iMaturity][i]/height/1.0E-04)+" cm^2/d \n")
                     myfile.write("\n")
                     myfile.write("Stele, cortex, and epidermis uptake distribution cm^3/d: \n")
-                    for j in range(int(r_discret[0])):
+                    for j in range(int(r_discret[0][0])):
                         myfile.write(str(UptakeLayer_plus[j][iMaturity][i])+" \n")
                     myfile.write("\n")
                     myfile.write("Stele, cortex, and epidermis release distribution cm^3/d: \n")
-                    for j in range(int(r_discret[0])):
+                    for j in range(int(r_discret[0][0])):
                         myfile.write(str(UptakeLayer_minus[j][iMaturity][i])+" \n")
                     myfile.write("\n")
                     myfile.write("Xylem uptake distribution cm^3/d: \n")
-                    for j in range(int(r_discret[0])):
+                    for j in range(int(r_discret[0][0])):
                         myfile.write(str(Q_xyl_layer[j][iMaturity][i])+" \n")
                     myfile.write("\n")
                     myfile.write("Phloem uptake distribution cm^3/d: \n")
-                    for j in range(int(r_discret[0])):
+                    for j in range(int(r_discret[0][0])):
                         myfile.write(str(Q_sieve_layer[j][iMaturity][i])+" \n")
                     myfile.write("\n")
                     myfile.write("Elongation flow convergence distribution cm^3/d: \n")
-                    for j in range(int(r_discret[0])):
+                    for j in range(int(r_discret[0][0])):
                         myfile.write(str(Q_elong_layer[j][iMaturity][i])+" \n")
                     myfile.write("\n")
                     myfile.write("Cell layers pressure potentials: \n")
-                    for j in range(int(r_discret[0])):
+                    for j in range(int(r_discret[0][0])):
                         myfile.write(str(PsiCellLayer[j][iMaturity][i])+" \n")
                     myfile.write("\n")
                     myfile.write("Cell layers osmotic potentials: \n")
-                    for j in range(int(r_discret[0])):
+                    for j in range(int(r_discret[0][0])):
                         myfile.write(str(OsCellLayer[j][iMaturity][i])+" \n")
                     myfile.write("\n")
                     myfile.write("Wall layers pressure potentials: \n")
-                    for j in range(int(r_discret[0])):
+                    for j in range(int(r_discret[0][0])):
                         if NWallLayer[j][iMaturity][i]>0:
                             myfile.write(str(PsiWallLayer[j][iMaturity][i]/NWallLayer[j][iMaturity][i])+" \n")
                         else:
                             myfile.write("nan \n")
                     myfile.write("\n")
                     myfile.write("Wall layers osmotic potentials: \n")
-                    for j in range(int(r_discret[0])):
+                    for j in range(int(r_discret[0][0])):
                         myfile.write(str(OsWallLayer[j][iMaturity][i])+" \n")
             myfile.close()
             text_file.close()
         
         return kr_tot_saved
         
-        if Sym_Contagion == 1: #write down results of the hydropatterning study
+        if general.sym_contagion == 1: #write down results of the hydropatterning study
             iMaturity=-1
-            for Maturity in Maturityrange:
+            for Maturity in geometry.maturity_elems:
                 Barrier=int(Maturity.get("Barrier"))
                 height=int(Maturity.get("height")) #(microns)
                 iMaturity+=1
@@ -4360,15 +4268,15 @@ def mecha(directory='./MECHA/',     #Project
                     myfile.write("\n")
                     myfile.write("Template: "+path+" \n")
                     myfile.write("\n")
-                    myfile.write("Source cell: "+str(Sym_Zombie0)+" \n")
+                    myfile.write("Source cell: "+str(hormones.sym_zombie0)+" \n")
                     myfile.write("\n")
-                    myfile.write("Target cells: "+str(Sym_Target)+" \n")
+                    myfile.write("Target cells: "+str(hormones.sym_target)+" \n")
                     myfile.write("\n")
-                    myfile.write("Immune cells: "+str(Sym_Immune)+" \n")
+                    myfile.write("Immune cells: "+str(hormones.sym_immune)+" \n")
                     myfile.write("\n")
                     myfile.write("Cross-section height: "+str(height*1.0E-04)+" cm \n")
                     myfile.write("\n")
-                    myfile.write("Cross-section perimeter: "+str(perimeter[0])+" cm \n")
+                    myfile.write("Cross-section perimeter: "+str(perimeter)+" cm \n")
                     myfile.write("\n")
                     myfile.write("Xcontact: "+str(Xcontact)+" microns \n")
                     myfile.write("\n")
@@ -4402,9 +4310,9 @@ def mecha(directory='./MECHA/',     #Project
                 myfile.close()
                 text_file.close()
         
-        if Apo_Contagion == 1: #write down results of the hydrotropism study
+        if general.apo_contagion == 1: #write down results of the hydrotropism study
             iMaturity=-1
-            for Maturity in Maturityrange:
+            for Maturity in geometry.maturity_elems:
                 Barrier=int(Maturity.get("Barrier"))
                 height=int(Maturity.get("height")) #(microns)
                 iMaturity+=1
@@ -4416,15 +4324,15 @@ def mecha(directory='./MECHA/',     #Project
                     myfile.write("\n")
                     myfile.write("Template: "+path+" \n")
                     myfile.write("\n")
-                    myfile.write("Source cell: "+str(Apo_Zombie0)+" \n")
+                    myfile.write("Source cell: "+str(hormones.apo_zombie0)+" \n")
                     myfile.write("\n")
-                    myfile.write("Target cells: "+str(Apo_Target)+" \n")
+                    myfile.write("Target cells: "+str(hormones.apo_target)+" \n")
                     myfile.write("\n")
-                    myfile.write("Immune cells: "+str(Apo_Immune)+" \n")
+                    myfile.write("Immune cells: "+str(hormones.apo_immune)+" \n")
                     myfile.write("\n")
                     myfile.write("Cross-section height: "+str(height*1.0E-04)+" cm \n")
                     myfile.write("\n")
-                    myfile.write("Cross-section perimeter: "+str(perimeter[0])+" cm \n")
+                    myfile.write("Cross-section perimeter: "+str(perimeter)+" cm \n")
                     myfile.write("\n")
                     myfile.write("Xcontact: "+str(Xcontact)+" microns \n")
                     myfile.write("\n")
@@ -4490,7 +4398,7 @@ def update_xml_attributes(file_path, parent_tag, child_tag, updates, output_path
     else:
         elem = root.find(f".//{parent_tag}/{child_tag}")
 
-    if elem is None:
+    if elem == None:
         raise ValueError(f"No <{child_tag}> element found (parent={parent_tag}).")
 
     # apply all updates
@@ -4498,7 +4406,7 @@ def update_xml_attributes(file_path, parent_tag, child_tag, updates, output_path
         elem.set(attr, str(val))
 
     # overwrite or save new file
-    if output_path is None:
+    if output_path == None:
         output_path = file_path  # overwrite original
 
     tree.write(output_path, encoding="UTF-8", xml_declaration=True)
@@ -4507,8 +4415,8 @@ def update_xml_attributes(file_path, parent_tag, child_tag, updates, output_path
 def set_hydraulic_scenario(xml_path, barriers):
     """
     Activate one or multiple hydraulic scenarios (Barrier values)
-    inside the <Maturityrange> section of a MECHA XML file.
-    Keeps <Maturityrange> tags intact, adding new barriers if missing.
+    inside the <geometry.maturity_elems> section of a MECHA XML file.
+    Keeps <geometry.maturity_elems> tags intact, adding new barriers if missing.
 
     Parameters
     ----------
@@ -4523,10 +4431,10 @@ def set_hydraulic_scenario(xml_path, barriers):
     with open(xml_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    # Extract the <Maturityrange> section
-    range_match = re.search(r'(<Maturityrange>)(.*?)(</Maturityrange>)', content, re.DOTALL)
+    # Extract the <geometry.maturity_elems> section
+    range_match = re.search(r'(<geometry.maturity_elems>)(.*?)(</geometry.maturity_elems>)', content, re.DOTALL)
     if not range_match:
-        raise ValueError("No <Maturityrange> section found in XML.")
+        raise ValueError("No <geometry.maturity_elems> section found in XML.")
 
     start_tag, inner_text, end_tag = range_match.groups()
 
@@ -4553,7 +4461,7 @@ def set_hydraulic_scenario(xml_path, barriers):
         if barrier not in existing_barriers:
             new_inner += f"\n{indent}<Maturity Barrier=\"{barrier}\" height=\"200\" Nlayers=\"1\"/>"
 
-    # Rebuild the <Maturityrange> section
+    # Rebuild the <geometry.maturity_elems> section
     new_range_section = f"{start_tag}{new_inner}\n{end_tag}"
 
     # Replace in the full content
@@ -4562,3 +4470,5 @@ def set_hydraulic_scenario(xml_path, barriers):
     # Write back
     with open(xml_path, "w", encoding="utf-8") as f:
         f.write(new_content)
+
+mecha()
