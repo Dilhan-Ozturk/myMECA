@@ -4,7 +4,7 @@ import numpy as np
 from typing import Dict, List, Any
 
 
-def parse_cellset(filepath: str, im_scale: float) -> Dict[str, Any]:
+def parse_cellset(filepath: str) -> Dict[str, Any]:
     """
     Parse the cell set XML file to extract wall and cell information
         
@@ -31,6 +31,5 @@ def parse_cellset(filepath: str, im_scale: float) -> Dict[str, Any]:
         'points': root.xpath('walls/wall/points'),
         'walls': root.xpath('cells/cell/walls/wall'),
         'cells': root.xpath('cells/cell'),
-        'cell_to_wall': root.xpath('cells/cell/walls'),
-        'im_scale': im_scale
+        'cell_to_wall': root.xpath('cells/cell/walls')
     }

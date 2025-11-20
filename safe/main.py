@@ -18,19 +18,19 @@ from hormones_loader import *
 from cellset_parser import *
 from network_builder import *
 
-def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'MilletLR3_General.xml' #
-          Geom='./extdata/Geometry.xml',#'Arabido4_Geometry_BBSRC.xml' #'Maize2_Geometry.xml' #''MilletLR3_Geometry.xml'    #'Wheat1_Nodal_Geometry_aerenchyma.xml' #'Maize1_Geometry.xml' #
-          Hydr='./extdata/Hydraulics.xml', #'Arabido1_Hydraulics_ERC.xml' #'MilletLR3_Hydraulics.xml' #'Test_Hydraulics.xml' #
-          BC='./extdata/Maize_BC_kr.xml', #'Arabido4_BC_BBSRC2.xml' #'Arabido1_BC_Emily.xml' #'Arabido3_BC_BBSRC.xml' #'Maize_BC_SoluteAna_krOsmo.xml'#'Maize_BC_OSxyl_hetero.xml' #'Arabido1_BC_Emily.xml' #'BC_Test.xml' #'Maize_BC_Plant_phys.xml'
-          Horm='./extdata/Maize_Hormones_Carriers.xml',
-          Cellset='./extdata/current_root.xml',#present in Geometry.xml
+def mecha(general_config='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'MilletLR3_General.xml' #
+          geometry_config='./extdata/Geometry.xml',#'Arabido4_Geometry_BBSRC.xml' #'Maize2_Geometry.xml' #''MilletLR3_Geometry.xml'    #'Wheat1_Nodal_Geometry_aerenchyma.xml' #'Maize1_Geometry.xml' #
+          hydraulic_config='./extdata/Hydraulics.xml', #'Arabido1_Hydraulics_ERC.xml' #'MilletLR3_Hydraulics.xml' #'Test_Hydraulics.xml' #
+          boundary_condition_config='./extdata/Maize_BC_kr.xml', #'Arabido4_BC_BBSRC2.xml' #'Arabido1_BC_Emily.xml' #'Arabido3_BC_BBSRC.xml' #'Maize_BC_SoluteAna_krOsmo.xml'#'Maize_BC_OSxyl_hetero.xml' #'Arabido1_BC_Emily.xml' #'BC_Test.xml' #'Maize_BC_Plant_phys.xml'
+          hormones_config='./extdata/Maize_Hormones_Carriers.xml',
+          cellset_file='./extdata/current_root.xml',#present in Geometry.xml
           outdir=os.getcwd()): 
     
     print('[1/5] Importing data')
-    general = GeneralData(General)
-    geometry = GeometryData(Geom)
-    hormones = HormonesData(Horm)
-    cellset = parse_cellset(Cellset, im_scale = geometry.im_scale)
+    general = GeneralData(general_config)
+    geometry = GeometryData(geometry_config)
+    hormones = HormonesData(hormones_config)
+    
 
     #Set path
     newpath=outdir + '/' + geometry.plant_name + '/'
@@ -42,15 +42,17 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
     PPP=list()
     
     print('[2/5] Creating the network')
-    create_wall_nodes()
-    
+    network = NetworkBuilder()
+    network.build_network(general, geometry, hormones, cellset_file)
+    network.create_wall_junction_nodes(geometry)
+
     #Initializes network structure
     G = nx.Graph() #Full network
     
     #Creates wall & junction nodes
     print('Creating network nodes')
-    n_walls=len(cellset['points'])
-    n_cells=len(cellset['cells'])
+    n_walls=len(network.cellset['points'])
+    n_cells=len(network.cellset['cells'])
     position_junction={}
     Junction2Wall={}
     nJunction2Wall={}
@@ -59,14 +61,15 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
     min_x_wall=inf
     max_x_wall=0
     jid=0
-    
-    for p in cellset['points']: #Loop on wall elements (groups of cellset['points'])
+
+    for p in network.cellset['points']: #Loop on wall elements (groups of network.cellset['points'])
         wid= int((p.getparent().get)("id")) #wid records the current wall id number
         xprev=inf
         yprev=inf
         length=0.0 #Calculating total wall length
         # Junctions node creation
-        for r in p: #Loop on cellset['points'] within the wall element to calculate their average X and Y coordinates 
+        for r in p: #Loop on network.cellset['points'] within the wall element to calculate their average X and Y coordinates 
+            i = 0
             x= geometry.im_scale*float(r.get("x")) #X coordinate of the point
             y= geometry.im_scale*float(r.get("y")) #Y coordinate of the point
             if xprev==inf: #First point
@@ -81,7 +84,7 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
                     position_junction[pos]=int(jid)
                     Junction2Wall[jid]=[wid] #Saves the cell wall ID number associated to the junction X Y coordinates
                     nJunction2Wall[jid]=1
-                    G.add_node(n_walls+jid, indice=n_walls+jid, type="apo", position=(float(x),float(y)), length=0) #Nodes are added at walls junctions (previous nodes corresponded to walls middle cellset['points']). By default, borderlink is 0, but will be adjusted in next loop
+                    G.add_node(n_walls+jid, indice=n_walls+jid, type="apo", position=(float(x),float(y)), length=0) #Nodes are added at walls junctions (previous nodes corresponded to walls middle network.cellset['points']). By default, borderlink is 0, but will be adjusted in next loop
                     jid+=1
             else:
                 length+=hypot(x-xprev,y-yprev)
@@ -99,7 +102,7 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
             position_junction[pos]=int(jid)
             Junction2Wall[jid]=[wid] #Saves the cell wall ID number associated to the junction X Y coordinates
             nJunction2Wall[jid]=1
-            G.add_node(n_walls+jid, indice=n_walls+jid, type="apo", position=(float(x),float(y)), length=0) #Nodes are added at walls junctions (previous nodes corresponded to walls middle cellset['points']). By default, borderlink is 0, but will be adjusted in next loop
+            G.add_node(n_walls+jid, indice=n_walls+jid, type="apo", position=(float(x),float(y)), length=0) #Nodes are added at walls junctions (previous nodes corresponded to walls middle network.cellset['points']). By default, borderlink is 0, but will be adjusted in next loop
             jid+=1
             
         #Second round, identifying the mid-point of the wall
@@ -117,6 +120,8 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
                 if temp2>=0: #If beyond the half length of the wall
                     mx=x-(x-xprev)*temp2/temp1 #Middle X coordinate of the wall
                     my=y-(y-yprev)*temp2/temp1 #Middle Y coordinate of the wall
+                    print(mx)
+                    print(my)
                     break #End the r in p loop
                 length2+=temp1
             xprev=x
@@ -126,7 +131,6 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
         #Creation of the wall node
         G.add_node(wid, indice=wid, type="apo", position=(mx,my), length=length) #Saving wall attributes for graphical display (id, border, type, X and Y coordinates)
     
-
     n_wall_junction=n_walls+jid
     Ntot=n_wall_junction+n_cells
     position=nx.get_node_attributes(G,'position') #Nodes XY positions (micrometers)
@@ -145,12 +149,12 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
     Borderlink=2*ones((n_wall_junction,1))
     Borderwall=[] #Soil-root interface wall
     Borderaerenchyma=[] #Wall at the surface of aerenchyma
-    for w in cellset['walls']: #Loop on walls, by cell - wall association, hence a wall can be repeated if associated to two cells
+    for w in network.cellset['walls']: #Loop on walls, by cell - wall association, hence a wall can be repeated if associated to two cells
         wid= int(w.get("id")) #Wall id number
         Borderlink[wid]-=1
-    for w in cellset['cell_to_wall']: #Loop on cells. cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
+    for w in network.cellset['cell_to_wall']: #Loop on cells. network.cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
         cgroup=int(w.getparent().get("group")) #Cell type (1=Exodermis;2=epidermis;3=endodermis;4=cortex;5=stele;16=pericycle)
-        for r in w: #w cellset['points'] to the cell walls around the current cell
+        for r in w: #w network.cellset['points'] to the cell walls around the current cell
             wid= int(r.get("id")) #Wall id number
             if Borderlink[wid]==1 and cgroup==2: #Wall node at the interface with soil
                 if wid not in Borderwall:
@@ -187,13 +191,13 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
     Apo_w_cc=[]
     Apo_w_Target=[]
     Apo_w_Immune=[]
-    for w in cellset['cell_to_wall']: #Loop on cells. cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
+    for w in network.cellset['cell_to_wall']: #Loop on cells. network.cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
         totx=0.0 #Summing up cell walls X positions
         toty=0.0 #Summing up cell walls Y positions
         cellnumber1 = int(w.getparent().get("id")) #Cell ID number
         cgroup=int(w.getparent().get("group")) #Cell type (1=Exodermis;2=epidermis;3=endodermis;4=cortex;5=stele;16=pericycle)
         div=float(len(w)) #Total number of walls around the current cell
-        for r in w: #w cellset['points'] to the cell walls around the current cell
+        for r in w: #w network.cellset['points'] to the cell walls around the current cell
             wid= int(r.get("id")) #Wall ID number
             totx += position[wid][0] #Contains the walls average X positions
             toty += position[wid][1] #Contains the walls average Y positions
@@ -204,24 +208,24 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
             listsieve.append(n_wall_junction+cellnumber1)
         elif cgroup==13 or cgroup==19 or cgroup==20: #Xylem vessel
             listxyl.append(n_wall_junction+cellnumber1)
-            for r in w: #w cellset['points'] to the cell walls around the current cell
+            for r in w: #w network.cellset['points'] to the cell walls around the current cell
                 wid= int(r.get("id")) #Wall ID number
                 listxylwalls.append(wid) #ghost walls crossing xylem vessels will appear twice
         if general.apo_contagion:
             if cellnumber1 in hormones.apo_zombie0:
                 cc=hormones.apo_cc[hormones.apo_zombie0.index(cellnumber1)]
-                for r in w: #w cellset['points'] to the cell walls around the current cell
+                for r in w: #w network.cellset['points'] to the cell walls around the current cell
                     wid= int(r.get("id")) #Wall ID number
                     if wid not in Apo_w_Zombies0:
                         Apo_w_Zombies0.append(wid)
                         Apo_w_cc.append(cc)
             if cellnumber1 in hormones.apo_target:
-                for r in w: #w cellset['points'] to the cell walls around the current cell
+                for r in w: #w network.cellset['points'] to the cell walls around the current cell
                     wid= int(r.get("id")) #Wall ID number
                     if wid not in Apo_w_Target:
                         Apo_w_Target.append(wid)
             if cellnumber1 in hormones.apo_immune:
-                for r in w: #w cellset['points'] to the cell walls around the current cell
+                for r in w: #w network.cellset['points'] to the cell walls around the current cell
                     wid= int(r.get("id")) #Wall ID number
                     if wid not in Apo_w_Immune:
                         Apo_w_Immune.append(wid)
@@ -236,7 +240,7 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
     cellperimeter=np.linspace(0,0,n_cells)
     cellarea=np.linspace(0,0,n_cells) #(micron^2)
     CellWallsList=[] #Includes both walls & junctions ordered in a consecutive order
-    for w in cellset['cell_to_wall']: #Loop on cells. cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
+    for w in network.cellset['cell_to_wall']: #Loop on cells. network.cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
         cellnumber1 = int(w.getparent().get("id")) #Cell ID number
         i=0
         for r in w: #Loop for wall elements around the cell
@@ -278,12 +282,12 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
     
     Cell_connec=-ones((n_cells,65),dtype=int) #Connected cells for further ranking
     nCell_connec=zeros((n_cells,1),dtype=int) #Quantity of cell to cell connectionsC:\Users\heymansad
-    for i in range(0, len(cellset['walls'])): #Loop on walls, by cell - wall association, hence a wall can be repeated if associated to two cells. Parent structure: Cell/Walls/Wall
-        r1 = cellset['walls'][i] #Points to the current wall
+    for i in range(0, len(network.cellset['walls'])): #Loop on walls, by cell - wall association, hence a wall can be repeated if associated to two cells. Parent structure: Cell/Walls/Wall
+        r1 = network.cellset['walls'][i] #Points to the current wall
         cellid1 = r1.getparent().getparent().get("id") #Cell1 ID number
         id1 = r1.get("id") #Wall1 ID number
-        for j in range(i + 1, len(cellset['walls']) ): #Loop on cell-wall associations that are further down in the list
-            r2 = cellset['walls'][j] #Points to the further down wall in the list of cell-wall associations
+        for j in range(i + 1, len(network.cellset['walls']) ): #Loop on cell-wall associations that are further down in the list
+            r2 = network.cellset['walls'][j] #Points to the further down wall in the list of cell-wall associations
             cellid2 = r2.getparent().getparent().get("id") #Cell2 ID number
             id2 = r2.get("id") #Wall2 ID number
             if id1 == id2: #If walls 1 and 2 are the same, then cells 1 and 2 are connected by plasmodesmata
@@ -309,7 +313,7 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
     x_grav=0.0 # (micrometers)
     y_grav=0.0 # (micrometers)
     n_cell_endo=0 #Counting the total number of cells in the endodermis
-    for w in cellset['cell_to_wall']: #Loop on cells. cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
+    for w in network.cellset['cell_to_wall']: #Loop on cells. network.cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
         cellnumber1 = int(w.getparent().get("id")) #Cell ID number
         if G.nodes[n_wall_junction + cellnumber1]['cgroup']==3: #Endodermis
                 x_grav+=position[n_wall_junction + cellnumber1][0]
@@ -322,7 +326,7 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
     Layer_dist=zeros((62,1)) #Average cell layers distances from center of gravity, by cells ranking 
     nLayer=zeros((62,1)) #Total number of cells in each rank (indices follow ranking numbers)
     xyl_dist=[] #List of distances between xylem and cross-section centre
-    for w in cellset['cell_to_wall']: #Loop on cells. cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
+    for w in network.cellset['cell_to_wall']: #Loop on cells. network.cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
         cellnumber1 = int(w.getparent().get("id")) #Cell ID number
         celltype=G.nodes[n_wall_junction + cellnumber1]['cgroup'] #Cell type
         if celltype==19 or celltype==20: #Proto- and Meta-xylem in new Cellset version
@@ -355,7 +359,7 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
     #rank_cellperimeters_out=linspace(nan,nan,100)
     listprotosieve=[]
     mincid=99999
-    for w in cellset['cell_to_wall']: #Loop on cells. cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
+    for w in network.cellset['cell_to_wall']: #Loop on cells. network.cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
         cellnumber1 = int(w.getparent().get("id")) #Cell ID number
         #celltype=G.nodes[n_wall_junction + cellnumber1]['cgroup']
         celltype=Cell_rank[cellnumber1] #Cell types 4 and 5 updated to account for their ranking within the cortex / stele
@@ -394,7 +398,7 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
     Nprotosieve=len(listprotosieve)
     
     for i in range(12):
-        for w in cellset['cell_to_wall']: #Loop on cells. cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
+        for w in network.cellset['cell_to_wall']: #Loop on cells. network.cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
             cellnumber1 = int(w.getparent().get("id")) #Cell ID number
             celltype=Cell_rank[cellnumber1] #Cell types 4 and 5 updated to account for their ranking within the cortex / stele
             if celltype==4 and i<4: #Cortex
@@ -619,7 +623,7 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
     davg_epi=0.0 #avg distance of between exodermis and centre of gravity (micrometers)
     dist_grav=zeros((n_walls,1)) #distance between node and cross-section center of gravity (micrometers)
     temp=0.0 #Counting the number of membranes from epidermis
-    for w in cellset['cell_to_wall']: #Loop on cells. cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
+    for w in network.cellset['cell_to_wall']: #Loop on cells. network.cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
         cellnumber1 = int(w.getparent().get("id")) #Cell ID number
         for r in w: #Loop for wall elements around the cell
             wid= int(r.get("id")) #Cell wall ID
@@ -903,44 +907,44 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
     
     #Import Hydraulic data
     print('Importing hydraulic data')
-    kwrange=etree.parse(Hydr).getroot().xpath('kwrange/kw')
-    kw_barrier_range=etree.parse(Hydr).getroot().xpath('kw_barrier_range/kw_barrier')
-    kmb=float(etree.parse(Hydr).getroot().xpath('km')[0].get("value"))
-    kAQPrange=etree.parse(Hydr).getroot().xpath('kAQPrange/kAQP')
+    kwrange=etree.parse(hydraulic_config).getroot().xpath('kwrange/kw')
+    kw_barrier_range=etree.parse(hydraulic_config).getroot().xpath('kw_barrier_range/kw_barrier')
+    kmb=float(etree.parse(hydraulic_config).getroot().xpath('km')[0].get("value"))
+    kAQPrange=etree.parse(hydraulic_config).getroot().xpath('kAQPrange/kAQP')
     
-    ratio_cortex=float(etree.parse(Hydr).getroot().xpath('ratio_cortex')[0].get("value"))
-    Kplrange=etree.parse(Hydr).getroot().xpath('Kplrange/Kpl')
-    Fplxheight=float(etree.parse(Hydr).getroot().xpath('Fplxheight')[0].get("value")) #Product of plasmodesmatal frequency (per square cm) by cell axial length when the frequency was counted (cm) => units: per cm of cell membrane perimeter, to be multiplied by cell perimeter in cm to obtain a quantity of plasmodesmata
-    Fplxheight_epi_exo=float(etree.parse(Hydr).getroot().xpath('Fplxheight_epi_exo')[0].get("value")) #Because they are "cell axial length independent", these values conserve the quantity of plasmodesmata when cells elongate
-    Fplxheight_outer_cortex=float(etree.parse(Hydr).getroot().xpath('Fplxheight_outer_cortex')[0].get("value"))
-    Fplxheight_cortex_cortex=float(etree.parse(Hydr).getroot().xpath('Fplxheight_cortex_cortex')[0].get("value"))
-    Fplxheight_cortex_endo=float(etree.parse(Hydr).getroot().xpath('Fplxheight_cortex_endo')[0].get("value"))
-    Fplxheight_endo_endo=float(etree.parse(Hydr).getroot().xpath('Fplxheight_endo_endo')[0].get("value"))
-    Fplxheight_endo_peri=float(etree.parse(Hydr).getroot().xpath('Fplxheight_endo_peri')[0].get("value"))
-    Fplxheight_peri_peri=float(etree.parse(Hydr).getroot().xpath('Fplxheight_peri_peri')[0].get("value"))
-    Fplxheight_peri_stele=float(etree.parse(Hydr).getroot().xpath('Fplxheight_peri_stele')[0].get("value"))
-    Fplxheight_stele_stele=float(etree.parse(Hydr).getroot().xpath('Fplxheight_stele_stele')[0].get("value"))
-    Fplxheight_stele_comp=float(etree.parse(Hydr).getroot().xpath('Fplxheight_stele_comp')[0].get("value"))
-    Fplxheight_peri_comp=float(etree.parse(Hydr).getroot().xpath('Fplxheight_peri_comp')[0].get("value"))
-    Fplxheight_comp_comp=float(etree.parse(Hydr).getroot().xpath('Fplxheight_comp_comp')[0].get("value"))
-    Fplxheight_comp_sieve=float(etree.parse(Hydr).getroot().xpath('Fplxheight_comp_sieve')[0].get("value"))
-    Fplxheight_peri_sieve=float(etree.parse(Hydr).getroot().xpath('Fplxheight_peri_sieve')[0].get("value"))
-    Fplxheight_stele_sieve=float(etree.parse(Hydr).getroot().xpath('Fplxheight_stele_sieve')[0].get("value"))
-    K_sieve=float(etree.parse(Hydr).getroot().xpath('K_sieve')[0].get("value")) #Sieve tube hydraulic conductance
-    K_xyl=float(etree.parse(Hydr).getroot().xpath('K_xyl')[0].get("value")) #Xylem vessel axial hydraulic conductance
-    Xcontactrange=etree.parse(Hydr).getroot().xpath('Xcontactrange/Xcontact')
-    path_hydraulics=etree.parse(Hydr).getroot().xpath('path_hydraulics/Output')
+    ratio_cortex=float(etree.parse(hydraulic_config).getroot().xpath('ratio_cortex')[0].get("value"))
+    Kplrange=etree.parse(hydraulic_config).getroot().xpath('Kplrange/Kpl')
+    Fplxheight=float(etree.parse(hydraulic_config).getroot().xpath('Fplxheight')[0].get("value")) #Product of plasmodesmatal frequency (per square cm) by cell axial length when the frequency was counted (cm) => units: per cm of cell membrane perimeter, to be multiplied by cell perimeter in cm to obtain a quantity of plasmodesmata
+    Fplxheight_epi_exo=float(etree.parse(hydraulic_config).getroot().xpath('Fplxheight_epi_exo')[0].get("value")) #Because they are "cell axial length independent", these values conserve the quantity of plasmodesmata when cells elongate
+    Fplxheight_outer_cortex=float(etree.parse(hydraulic_config).getroot().xpath('Fplxheight_outer_cortex')[0].get("value"))
+    Fplxheight_cortex_cortex=float(etree.parse(hydraulic_config).getroot().xpath('Fplxheight_cortex_cortex')[0].get("value"))
+    Fplxheight_cortex_endo=float(etree.parse(hydraulic_config).getroot().xpath('Fplxheight_cortex_endo')[0].get("value"))
+    Fplxheight_endo_endo=float(etree.parse(hydraulic_config).getroot().xpath('Fplxheight_endo_endo')[0].get("value"))
+    Fplxheight_endo_peri=float(etree.parse(hydraulic_config).getroot().xpath('Fplxheight_endo_peri')[0].get("value"))
+    Fplxheight_peri_peri=float(etree.parse(hydraulic_config).getroot().xpath('Fplxheight_peri_peri')[0].get("value"))
+    Fplxheight_peri_stele=float(etree.parse(hydraulic_config).getroot().xpath('Fplxheight_peri_stele')[0].get("value"))
+    Fplxheight_stele_stele=float(etree.parse(hydraulic_config).getroot().xpath('Fplxheight_stele_stele')[0].get("value"))
+    Fplxheight_stele_comp=float(etree.parse(hydraulic_config).getroot().xpath('Fplxheight_stele_comp')[0].get("value"))
+    Fplxheight_peri_comp=float(etree.parse(hydraulic_config).getroot().xpath('Fplxheight_peri_comp')[0].get("value"))
+    Fplxheight_comp_comp=float(etree.parse(hydraulic_config).getroot().xpath('Fplxheight_comp_comp')[0].get("value"))
+    Fplxheight_comp_sieve=float(etree.parse(hydraulic_config).getroot().xpath('Fplxheight_comp_sieve')[0].get("value"))
+    Fplxheight_peri_sieve=float(etree.parse(hydraulic_config).getroot().xpath('Fplxheight_peri_sieve')[0].get("value"))
+    Fplxheight_stele_sieve=float(etree.parse(hydraulic_config).getroot().xpath('Fplxheight_stele_sieve')[0].get("value"))
+    K_sieve=float(etree.parse(hydraulic_config).getroot().xpath('K_sieve')[0].get("value")) #Sieve tube hydraulic conductance
+    K_xyl=float(etree.parse(hydraulic_config).getroot().xpath('K_xyl')[0].get("value")) #Xylem vessel axial hydraulic conductance
+    Xcontactrange=etree.parse(hydraulic_config).getroot().xpath('Xcontactrange/Xcontact')
+    path_hydraulics=etree.parse(hydraulic_config).getroot().xpath('path_hydraulics/Output')
     
     #Import boundary conditions
-    Psi_soil_range=etree.parse(BC).getroot().xpath('Psi_soil_range/Psi_soil')
-    BC_xyl_range=etree.parse(BC).getroot().xpath('BC_xyl_range/BC_xyl')
-    BC_sieve_range=etree.parse(BC).getroot().xpath('BC_sieve_range/BC_sieve')
-    Psi_cell_range=etree.parse(BC).getroot().xpath('Psi_cell_range/Psi_cell')
-    Elong_cell_range=etree.parse(BC).getroot().xpath('Elong_cell_range/Elong_cell')
-    #Elong_cell_kappa=float(etree.parse(BC).getroot().xpath('Elong_cell')[0].get("kappa_dot")) #Rate change of curvature (radian/micron/d)
-    Water_fraction_apo=float(etree.parse(BC).getroot().xpath('Water_fractions')[0].get("Apoplast")) #Relative volumetric fraction of water in the apoplast (dimensionless)
-    Water_fraction_sym=float(etree.parse(BC).getroot().xpath('Water_fractions')[0].get("Symplast")) #Relative volumetric fraction of water in the symplast (dimensionless)
-    path_BC=etree.parse(BC).getroot().xpath('path_scenarios/Output')[0].get("path")
+    Psi_soil_range=etree.parse(boundary_condition_config).getroot().xpath('Psi_soil_range/Psi_soil')
+    BC_xyl_range=etree.parse(boundary_condition_config).getroot().xpath('BC_xyl_range/BC_xyl')
+    BC_sieve_range=etree.parse(boundary_condition_config).getroot().xpath('BC_sieve_range/BC_sieve')
+    Psi_cell_range=etree.parse(boundary_condition_config).getroot().xpath('Psi_cell_range/Psi_cell')
+    Elong_cell_range=etree.parse(boundary_condition_config).getroot().xpath('Elong_cell_range/Elong_cell')
+    #Elong_cell_kappa=float(etree.parse(boundary_condition_config).getroot().xpath('Elong_cell')[0].get("kappa_dot")) #Rate change of curvature (radian/micron/d)
+    Water_fraction_apo=float(etree.parse(boundary_condition_config).getroot().xpath('Water_fractions')[0].get("Apoplast")) #Relative volumetric fraction of water in the apoplast (dimensionless)
+    Water_fraction_sym=float(etree.parse(boundary_condition_config).getroot().xpath('Water_fractions')[0].get("Symplast")) #Relative volumetric fraction of water in the symplast (dimensionless)
+    path_BC=etree.parse(boundary_condition_config).getroot().xpath('path_scenarios/Output')[0].get("path")
     Nhydraulics=len(path_hydraulics) #Total number of hydraulic parameters sets
     Nkw=len(kwrange)
     NKpl=len(Kplrange)
@@ -960,14 +964,14 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
         Os_soil[1][count]=float(Psi_soil_range[count].get("osmotic_right"))
         Os_soil[2][count]=float(Psi_soil_range[count].get("osmotic_symmetry"))
         Os_soil[3][count]=float(Psi_soil_range[count].get("osmotic_shape")) #1 for linear, >1 for outer slope flat, <1 for inner slope flat
-        Os_soil[4][count]=float(etree.parse(BC).getroot().xpath('Psi_soil_range/osmotic_diffusivity')[0].get("value"))
-        #Os_soil[5][count]=float(etree.parse(BC).getroot().xpath('Psi_soil_range/osmotic_convection')[0].get("flag"))
+        Os_soil[4][count]=float(etree.parse(boundary_condition_config).getroot().xpath('Psi_soil_range/osmotic_diffusivity')[0].get("value"))
+        #Os_soil[5][count]=float(etree.parse(boundary_condition_config).getroot().xpath('Psi_soil_range/osmotic_convection')[0].get("flag"))
         Os_xyl[0][count]=float(BC_xyl_range[count].get("osmotic_xyl"))
         Os_xyl[1][count]=float(BC_xyl_range[count].get("osmotic_endo"))
         Os_xyl[2][count]=float(BC_xyl_range[count].get("osmotic_symmetry"))
         Os_xyl[3][count]=float(BC_xyl_range[count].get("osmotic_shape")) #The symmetry is central. 1 for linear, >1 for outer slope flat, <1 for inner slope flat
-        Os_xyl[4][count]=float(etree.parse(BC).getroot().xpath('BC_xyl_range/osmotic_diffusivity')[0].get("value"))
-        #Os_xyl[5][count]=float(etree.parse(BC).getroot().xpath('BC_xyl_range/osmotic_convection')[0].get("flag"))
+        Os_xyl[4][count]=float(etree.parse(boundary_condition_config).getroot().xpath('BC_xyl_range/osmotic_diffusivity')[0].get("value"))
+        #Os_xyl[5][count]=float(etree.parse(boundary_condition_config).getroot().xpath('BC_xyl_range/osmotic_convection')[0].get("flag"))
         if not Os_xyl[4][count]==0 and not Os_soil[4][count]==0:
             C_flag=True
             print('Calculation of analytical solution for radial solute transport in cell walls')
@@ -1197,7 +1201,7 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
             else:
                 tot_surf_cortex=0.0 #Total membrane exchange surface in cortical cells (square centimeters)
                 temp=0.0 #Term for summation (cm3)
-                for w in cellset['cell_to_wall']: #Loop on cells. cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
+                for w in network.cellset['cell_to_wall']: #Loop on cells. network.cellset['cell_to_wall'] contains cell wall groups info (one group by cell)
                     cellnumber1 = int(w.getparent().get("id")) #Cell ID number
                     for r in w: #Loop for wall elements around the cell
                         wid= int(r.get("id")) #Cell wall ID
@@ -1220,19 +1224,19 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
                 for i in range(n_walls):
                     if i in Apo_w_Zombies0:
                         matrix_C[i][i]=1.0
-                        rhs_C[i][0]=Apo_w_cc[Apo_w_Zombies0.index(i)] #1.0 #Concentration in source wall i defined in Geom
+                        rhs_C[i][0]=Apo_w_cc[Apo_w_Zombies0.index(i)] #1.0 #Concentration in source wall i defined in geometry_config
                     else: #Decomposition rate (mol decomp/mol-day * cm^3)
                         matrix_C[i][i]-=hormones.degrad1*1.0E-12*(lat_dists[i][0]*geometry.thickness*lengths[i]+height*geometry.thickness*lengths[i]/2-square(geometry.thickness)*lengths[i])
                 for j in range(n_walls,n_wall_junction):
                     if j in Apo_j_Zombies0:
                         matrix_C[j][j]=1.0
-                        rhs_C[j][0]=Apo_j_cc[Apo_j_Zombies0.index(j)] #1.0 #Concentration in source junction j defined in Geom
+                        rhs_C[j][0]=Apo_j_cc[Apo_j_Zombies0.index(j)] #1.0 #Concentration in source junction j defined in geometry_config
                     else: #Decomposition rate (mol decomp/mol-day * cm^3)
                         matrix_C[j][j]-=hormones.degrad1*1.0E-12*height*geometry.thickness*lengths[j]/2
                 for cellnumber1 in range(n_cells):
                     if cellnumber1 in hormones.sym_zombie0:
                         matrix_C[n_wall_junction+cellnumber1][n_wall_junction+cellnumber1]=1.0
-                        rhs_C[n_wall_junction+cellnumber1][0]=hormones.sym_cc[hormones.sym_zombie0.index(cellnumber1)] #1.0 #Concentration in source protoplasts defined in Geom
+                        rhs_C[n_wall_junction+cellnumber1][0]=hormones.sym_cc[hormones.sym_zombie0.index(cellnumber1)] #1.0 #Concentration in source protoplasts defined in geometry_config
                     else: #Decomposition rate (mol decomp/mol-day * cm^3)
                         matrix_C[n_wall_junction+cellnumber1][n_wall_junction+cellnumber1]-=hormones.degrad1*1.0E-12*cellarea[cellnumber1]*height
             elif general.apo_contagion==2:
@@ -3781,7 +3785,7 @@ def mecha(General='./extdata/Maize_General.xml',#'Arabido1_General.xml' #'Millet
                             for ThickWallNode in ThickWalls:
                                 if ThickWallNode[1]>=n_walls: #wall that is a junction
                                     if ThickWalls[int(ThickWallNode[5])][1] not in list_ghostwalls:
-                                        myfile.write("4 " + str(int(ThickWallNode[0])) + " " + str(int(ThickWallNode[5])) + " " + str(int(ThickWallNode[5])+len(ThickWalls)) + " " + str(int(ThickWallNode[0])+len(ThickWalls)) + " \n") #All cellset['points'] were repeated twice (once at z=0 and once at z=height), so adding len(ThickWalls) is the same point at z=height
+                                        myfile.write("4 " + str(int(ThickWallNode[0])) + " " + str(int(ThickWallNode[5])) + " " + str(int(ThickWallNode[5])+len(ThickWalls)) + " " + str(int(ThickWallNode[0])+len(ThickWalls)) + " \n") #All network.cellset['points'] were repeated twice (once at z=0 and once at z=height), so adding len(ThickWalls) is the same point at z=height
                                     if ThickWalls[int(ThickWallNode[6])][1] not in list_ghostwalls:
                                         myfile.write("4 " + str(int(ThickWallNode[0])) + " " + str(int(ThickWallNode[6])) + " " + str(int(ThickWallNode[6])+len(ThickWalls)) + " " + str(int(ThickWallNode[0])+len(ThickWalls)) + " \n")
                             myfile.write(" \n")
